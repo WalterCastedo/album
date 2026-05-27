@@ -149,25 +149,33 @@ export default function App() {
     cargarStickers()
   }
 
-  // CONFIGURADOR DE REJILLAS GRID AMPLIADAS
-  const obtenerColumnasGrid = (cantidad) => {
-    if (cantidad === 1) return 'grid-cols-1 max-w-[130px] md:max-w-[180px]'
-    if (cantidad === 2 || cantidad === 4) return 'grid-cols-2 max-w-[240px] md:max-w-[380px]'
-    return 'grid-cols-3 max-w-[340px] md:max-w-[460px]' 
-  }
+  // CONFIGURADOR DE DISTRIBUCIÓN EXACTA
+  const agruparCromos = (slots) => {
+    const n = slots.length;
+    if (n === 1) return [slots];
+    if (n === 2) return [[slots[0]], [slots[1]]];                                   // 1 arriba, 1 abajo
+    if (n === 3) return [[slots[0]], [slots[1], slots[2]]];                         // 1 arriba, 2 abajo
+    if (n === 4) return [slots.slice(0, 2), slots.slice(2, 4)];                     // 2 arriba, 2 abajo
+    if (n === 5) return [slots.slice(0, 2), slots.slice(2, 5)];                     // 2 arriba, 3 abajo
+    if (n === 6) return [slots.slice(0, 2), slots.slice(2, 4), slots.slice(4, 6)];  // 2, 2, 2
+    if (n === 7) return [slots.slice(0, 2), slots.slice(2, 4), slots.slice(4, 7)];  // 2, 2, 3
+    if (n === 8) return [slots.slice(0, 2), slots.slice(2, 5), slots.slice(5, 8)];  // 2, 3, 3
+    if (n === 9) return [slots.slice(0, 3), slots.slice(3, 6), slots.slice(6, 9)];  // 3, 3, 3
+    return [slots];
+  };
 
   const irAtras = () => flipBookRef.current?.pageFlip().flipPrev()
   const irAdelante = () => flipBookRef.current?.pageFlip().flipNext()
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-2 md:p-6 font-sans selection:bg-pink-500 overflow-x-hidden real-album-body flex flex-col justify-between">
+    <div className="h-screen bg-slate-950 text-white p-1 md:p-3 font-sans selection:bg-pink-500 overflow-hidden real-album-body flex flex-col">
       
       {/* ENCABEZADO PRINCIPAL */}
-      <header className="max-w-5xl mx-auto text-center mb-1 select-none shrink-0">
+      <header className="max-w-5xl mx-auto text-center mb-.5 select-none">
         <span className="inline-block bg-gradient-to-r from-pink-500/10 to-amber-500/10 text-pink-400 text-[10px] md:text-xs font-bold tracking-widest uppercase px-3 py-0.5 rounded-full border border-pink-500/20 shadow-sm">
          Álbum
         </span>
-        <h1 className="text-2xl md:text-5xl font-black tracking-tight mt-0.5 bg-gradient-to-r from-pink-400 via-rose-300 to-amber-300 bg-clip-text text-transparent drop-shadow-sm">
+        <h1 className="text-xl md:text-3xl font-black tracking-tight mt-0.5 bg-gradient-to-r from-pink-400 via-rose-300 to-amber-300 bg-clip-text text-transparent drop-shadow-sm">
           Walter y Esmeralda
         </h1>
       </header>
@@ -183,7 +191,7 @@ export default function App() {
       </div>
 
       {/* ESTRUCTURA CONTENEDORA GLOBAL EN FILA CON BOTONES LATERALES INTEGRADOS */}
-      <div className="w-full max-w-6xl mx-auto flex items-center justify-center gap-1 sm:gap-4 flex-1 my-auto px-0.5">
+      <div className="w-full max-w-6xl mx-auto flex items-center justify-center gap-1 sm:gap-4 flex-1 my-auto px-0.5 ">
         
         {/* ◀️ BOTÓN IZQUIERDO NATIVO */}
         <button
@@ -191,35 +199,39 @@ export default function App() {
           className="bg-slate-900/95 hover:bg-pink-600 text-white w-8 h-8 md:w-12 md:h-12 rounded-full flex items-center justify-center border border-slate-700/90 shadow-xl transition-all shrink-0 active:scale-90 z-50"
           title="Anterior"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5 md:w-5 md:h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5 md:w-5 md:h-"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
         </button>
 
         {paginas.length > 0 && (
-          <div className="album-book-container relative w-full max-w-[305px] sm:max-w-[390px] md:max-w-[1000px] h-[76vh] min-h-[520px] md:h-[650px] p-0.5 md:p-1 bg-slate-900 rounded-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.85)] overflow-hidden flex-1">
+          <div className="album-book-container relative w-full max-w-[315px] sm:max-w-[390px] md:max-w-[1000px] h-[81vh] min-h-[560px] md:h-[650px] p-0.5 md:p-1 bg-slate-900 rounded-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.85)] overflow-hidden flex-1">
             
             {!isMobile && (
               <div className="absolute left-1/2 top-0 bottom-0 w-6 bg-gradient-to-r from-black/50 via-black/15 to-black/50 -translate-x-1/2 z-40 pointer-events-none border-x border-black/30" />
             )}
 
-            <HTMLFlipBook
-              width={500}
-              height={650}
-              size="stretch"
-              minWidth={280}
-              maxWidth={500}
-              minHeight={500}
-              maxHeight={650}
-              maxShadowOpacity={0.6}
-              showCover={false}
-              useMouseEvents={true}
-              mode={isMobile ? 'portrait' : 'landscape'}
-              onFlip={(e) => {
-                const index = e.data;
-                if (paginas[index]) setPaginaActiva(paginas[index].id)
-              }}
-              ref={flipBookRef}
-              className="album-flipbook h-full w-full"
-            >
+           <HTMLFlipBook
+  width={500}
+  height={isMobile ? 700 : 650}
+  size="stretch"
+  minWidth={280}
+  maxWidth={500}
+  minHeight={isMobile ? 560 : 500}
+  maxHeight={650}
+  maxShadowOpacity={0.6}
+  showCover={false}
+
+  useMouseEvents={false}
+  mobileScrollSupport={false}
+  disableFlipByClick={true}
+
+  mode={isMobile ? 'portrait' : 'landscape'}
+  onFlip={(e) => {
+    const index = e.data;
+    if (paginas[index]) setPaginaActiva(paginas[index].id)
+  }}
+  ref={flipBookRef}
+  className="album-flipbook h-full w-full"
+>
               {paginas.map((pag, index) => {
                 const totalCromos = Math.min(pag.cantidad_fotos || 6, 9);
                 const slotsArray = Array.from({ length: totalCromos }, (_, i) => i + 1);
@@ -228,7 +240,7 @@ export default function App() {
                 const esPaginaDerecha = !isMobile && index % 2 !== 0;
 
                 return (
-                  <div key={pag.id} className="w-full h-full bg-slate-900 relative overflow-hidden select-none page-sheet flex flex-col justify-between">
+                  <div key={pag.id} className="w-full h-full pb-15 bg-slate-900 relative overflow-hidden select-none page-sheet flex flex-col justify-between">
                     
                     {/* CAPA DE FONDO INDEPENDIENTE */}
                     <div 
@@ -250,7 +262,7 @@ export default function App() {
                       }`}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className={`flex flex-col min-w-0 ${esPaginaDerecha ? 'items-end text-right' : 'items-start text-left'}`}>
+                      <div className={`flex flex-col min-w-0 ${esPaginaDerecha ? 'items-end text-righ' : 'items-start text-left'}`}>
                         <span className="text-[11px] md:text-xs font-black tracking-wide text-slate-100 truncate max-w-[120px] md:max-w-[240px]">
                           {pag.titulo}
                         </span>
@@ -266,7 +278,7 @@ export default function App() {
                           className="bg-slate-900 hover:bg-slate-800 px-2 py-0.5 md:px-2.5 md:py-1 rounded-xl text-[10px] md:text-[11px] font-bold border border-slate-700 text-slate-200 flex items-center gap-1 transition-all active:scale-95 shadow-sm"
                         >
                           ⚙️ Ver opciones
-                        </button>
+               t         </button>
 
                         {menuAbiertoPagina === pag.id && (
                           <div className={`absolute mt-2 w-44 bg-slate-950/95 border border-slate-800 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.6)] z-50 py-1 overflow-hidden backdrop-blur-md ${
@@ -298,61 +310,67 @@ export default function App() {
                     </div>
 
                     {/* CUERPO OPERATIVO AJUSTADO: justify-start y padding superior pt-4 / pt-8 sitúan el bloque arriba */}
-                    <div className="w-full h-full flex-1 flex flex-col justify-start items-center content-center p-1.5 pt-4 md:p-3 md:pt-2 relative z-10 box-border overflow-hidden">
+                    <div className="w-full h-full flex-1 flex flex-col justify-start items-center mt-0 content-center p-0 pt-0 md:p-0 md:pt-0 relative z-10 box-border overflow-hidden">
                       
-                      {/* GRID AJUSTADO: Se eliminó 'my-auto' para que no auto-centre verticalmente */}
-                      <div className={`grid ${obtenerColumnasGrid(totalCromos)} gap-2 md:gap-4 w-full justify-center items-center justify-items-center content-center`}>
-                        {slotsArray.map(slotId => {
-                          const sticker = stickersPagina.find(s => s.slot_id === slotId)
-                          const ocupado = !!sticker
-                          const esEspecial = slotId % 2 === 0
+                      {/* ESTRUCTURA FLEX DE FILAS EXACTAS */}
+                      <div className="w-full flex flex-col justify-center items-center  gap-1 md:gap-2 h-full">
+                        {agruparCromos(slotsArray).map((fila, indexFila) => (
+                          
+                          <div key={`fila-${indexFila}`} className="flex flex-row justify-center items-center gap-2 md:gap-4 w-full">
+                            {fila.map(slotId => {
+                              const sticker = stickersPagina.find(s => s.slot_id === slotId)
+                              const ocupado = !!sticker
+                              const esEspecial = slotId % 2 === 0
 
-                          return (
-                            <div key={slotId} className="w-[70px] h-[95px] sm:w-[92px] sm:h-[125px] md:w-[110px] md:h-[155px] pointer-events-auto shadow-sm rounded-xl transition-all duration-300">
-                              <label className={`block h-full ${ocupado ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                                <input
-                                  type="file"
-                                  hidden
-                                  disabled={ocupado}
-                                  onChange={async (e) => {
-                                    if (ocupado || !e.target.files?.[0]) return
-                                    const file = await comprimirImagen(e.target.files[0])
-                                    subirStickerSlot(file, pag.id, slotId)
-                                  }}
-                                />
+                              return (
+                                <div key={slotId} className="w-[58px] h-[82px] sm:w-[92px] sm:h-[125px] md:w-[110px] md:h-[155px] pointer-events-auto shadow-sm rounded-xl transition-all duration-300">
+                                  <label className={`block h-full ${ocupado ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                                    <input
+                                      type="file"
+                                      hidden
+                                      disabled={ocupado}
+                                      onChange={async (e) => {
+                                        if (ocupado || !e.target.files?.[0]) return
+                                        const file = await comprimirImagen(e.target.files[0])
+                                        subirStickerSlot(file, pag.id, slotId)
+                                      }}
+                                    />
 
-                                <div className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${
-                                  ocupado 
-                                    ? 'border-white bg-white hover:rotate-1 hover:scale-105 shadow-md shadow-black/60' 
-                                    : esEspecial
-                                      ? 'border-dashed border-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.1)]'
-                                      : 'border-dashed border-slate-700 bg-slate-950/90 hover:border-slate-500 hover:bg-slate-900/40'
-                                }`}>
-                                  
-                                  {sticker ? (
-                                    <div className="w-full h-full p-0.5 bg-white relative group">
-                                      <img
-                                        src={sticker.image}
-                                        className="w-full h-full object-cover rounded-lg cursor-pointer"
-                                        onClick={() => setStickerSeleccionado(sticker)}
-                                      />
-                                      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+                                    <div className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${
+                                      ocupado 
+                                        ? 'border-white bg-white hover:rotate-1 hover:scale-105 shadow-md shadow-black/60' 
+                                        : esEspecial
+                                          ? 'border-dashed border-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.1)]'
+                                          : 'border-dashed border-slate-700 bg-slate-950/90 hover:border-slate-500 hover:bg-slate-900/40'
+                                    }`}>
+                                      
+                                      {sticker ? (
+                                        <div className="w-full h-full p-0.5 bg-white relative group">
+                                          <img
+                                            src={sticker.image}
+                                            className="w-full h-full object-cover rounded-lg cursor-pointer"
+                                            onClick={() => setStickerSeleccionado(sticker)}
+                                            alt="Cromo"
+                                          />
+                                          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col items-center justify-center select-none text-center p-0.5">
+                                          <span className={`text-[6.5px] md:text-[9px] font-mono tracking-tighter uppercase font-bold ${esEspecial ? 'text-amber-400' : 'text-slate-600'}`}>
+                                            {esEspecial ? '★ BRILL' : 'CROMO'}
+                                          </span>
+                                          <span className={`text-xs md:text-xl font-black tracking-tighter font-mono ${esEspecial ? 'text-amber-300' : 'text-slate-500'}`}>
+                                            {slotId < 10 ? `0${slotId}` : slotId}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : (
-                                    <div className="flex flex-col items-center justify-center select-none text-center p-0.5">
-                                      <span className={`text-[6.5px] md:text-[9px] font-mono tracking-tighter uppercase font-bold ${esEspecial ? 'text-amber-400' : 'text-slate-600'}`}>
-                                        {esEspecial ? '★ BRILL' : 'CROMO'}
-                                      </span>
-                                      <span className={`text-xs md:text-xl font-black tracking-tighter font-mono ${esEspecial ? 'text-amber-300' : 'text-slate-500'}`}>
-                                        {slotId < 10 ? `0${slotId}` : slotId}
-                                      </span>
-                                    </div>
-                                  )}
+                                  </label>
                                 </div>
-                              </label>
-                            </div>
-                          )
-                        })}
+                              )
+                            })}
+                          </div>
+                        ))}
                       </div>
 
                     </div>
@@ -433,6 +451,9 @@ export default function App() {
         .stf__parent:active {
           cursor: grabbing;
         }
+        .stf__parent {
+  cursor: default !important;
+}
       `}</style>
     </div>
   )
