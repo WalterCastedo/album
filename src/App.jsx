@@ -399,74 +399,86 @@ flex-shrink min-w-0 max-w-[35vw]
 
 </div>
       {/* CONTENEDOR DE NAVEGACIÓN Y ÁLBUM */}
-      <div className="w-full max-w-[1200px] mx-auto flex items-center justify-between flex-1 my-auto px-1 sm:px-4 relative">
+      <div className="w-full max-w-[1200px] mx-auto flex flex-col md:flex-row items-start justify-between my-0 px-1 sm:px-4 relative">
         
         {paginas.length > 0 && (
           <>
             {/* BOTÓN IZQUIERDO MEJORADO PARA MÓVILES */}
-            <button
-            style={{ touchAction: 'manipulation' }}
-            onTouchStart={(e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  flipBookRef.current?.pageFlip().flipPrev()
-}}
-
-onClick={(e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  flipBookRef.current?.pageFlip().flipPrev()
-}}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="absolute left-1 md:left-4 z-[9999] shrink-0 pointer-events-auto bg-slate-800/95 hover:bg-slate-700 active:scale-95 w-11 h-11 md:w-14 md:h-14 rounded-full flex items-center justify-center pb-1 text-slate-200 hover:text-white text-3xl md:text-4xl font-light shadow-[0_0_15px_rgba(0,0,0,0.6)] border border-slate-500/50 backdrop-blur-md transition-all"
-            >
-              ‹
-            </button>
+           <button
+  style={{ touchAction: 'manipulation' }}
+  onClick={(e) => {
+    e.stopPropagation()
+    flipBookRef.current?.pageFlip()?.flipPrev()
+  }}
+  className="
+    hidden md:flex
+    absolute left-4 top-1/2 -translate-y-1/2
+    z-[9999]
+    w-14 h-14 rounded-full
+    items-center justify-center
+    bg-slate-800/95 hover:bg-slate-700
+    active:scale-95
+    text-slate-200 hover:text-white
+    text-4xl font-light
+    shadow-[0_0_15px_rgba(0,0,0,0.6)]
+    border border-slate-500/50
+    backdrop-blur-md
+    transition-all
+  "
+>
+  ‹
+</button>
 
             {/* CONTENEDOR DEL LIBRO (Centrado) */}
             <div
-  className="album-book-container relative w-full max-w-[340px] sm:max-w-[420px] md:max-w-[1000px] h-[81vh] min-h-[560px] md:h-[650px] p-0.5 md:p-1 bg-slate-900 rounded-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.85)] overflow-hidden z-10 mx-auto"
-  style={{
+  className="z-50 pointer-events-auto album-book-container relative w-full max-w-[340px] sm:max-w-[420px] md:max-w-[1000px] h-[75vh] md:h-[650px] p-0 md:p-1 bg-slate-900 rounded-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.85)] overflow-hidden z-10 mx-auto"  style={{
     touchAction: 'none',
     overscrollBehavior: 'contain'
   }}
 >  
               {!isMobile && (
-                <div className="absolute left-1/2 top-0 bottom-0 w-6 bg-gradient-to-r from-black/50 via-black/15 to-black/50 -translate-x-1/2 z-40 pointer-events-none border-x border-black/30" />
+                <div className="absolute  left-1/2 top-0 bottom-0 w-6 bg-gradient-to-r from-black/50 via-black/15 to-black/50 -translate-x-1/2 z-40 pointer-events-none border-x border-black/30" />
               )}
 
-              <HTMLFlipBook
-                width={500}
-                height={isMobile ? 700 : 650}
-                size="stretch"
-                minWidth={280}
-                maxWidth={500}
-                minHeight={isMobile ? 560 : 500}
-                maxHeight={650}
-                maxShadowOpacity={0.6}
-                showCover={true}
-                useMouseEvents={true}
-                mobileScrollSupport={false}
-                disableFlipByClick={true}
-                clickEventForward={false}
-                drawShadow={true}
-                startPage={0}
-                mode={isMobile ? 'portrait' : 'landscape'}
-              onFlip={(e) => {
-  const index = e.data
+             <HTMLFlipBook
+  width={500}
+  height={isMobile ? window.innerHeight : 650}
 
-  setPaginaActualFlip(index)
+  size="stretch"
+  minWidth={280}
+  maxWidth={500}
+  minHeight={isMobile ? 560 : 500}
+  maxHeight={650}
+  maxShadowOpacity={0.6}
+  showCover={true}
 
-  if (index > 0 && paginas[index - 1]) {
-    setPaginaActiva(paginas[index - 1].id)
-  }
-}}
-                ref={flipBookRef}
-                className="album-flipbook h-full w-full"
-              >
+  // 🔴 DESACTIVAR INTERACCIÓN MOUSE / DRAG
+  useMouseEvents={true}
+  clickEventForward={false}
+  disableFlipByClick={true}
+  mobileScrollSupport={false}
+  swipeDistance={9999}
+
+  drawShadow={true}
+  startPage={0}
+  mode={isMobile ? 'portrait' : 'landscape'}
+
+  onFlip={(e) => {
+    const index = e.data
+    setPaginaActualFlip(index)
+
+    if (index > 0 && paginas[index - 1]) {
+      setPaginaActiva(paginas[index - 1].id)
+    }
+  }}
+
+  ref={flipBookRef}
+>
            {/* PORTADA DEL ÁLBUM */}
-<div className="w-full h-full relative overflow-hidden bg-black">
-
+<div
+  className="w-full h-full relative overflow-hidden bg-black"
+  onPointerDown={(e) => e.stopPropagation()}
+>
   {/* IMAGEN */}
   {album?.portada ? (
     <img
@@ -485,7 +497,8 @@ onClick={(e) => {
 
   {/* TÍTULO */}
   <div
-  className="absolute inset-0 flex p-6"
+    className="absolute inset-0 flex p-6 pointer-events-none"
+
   style={{
     justifyContent:
       isMobile
@@ -507,6 +520,7 @@ onClick={(e) => {
   }}
 >
     <textarea
+    
   value={album?.titulo || ''}
   onChange={(e) => {
     if (paginaActualFlip === 0) {
@@ -523,6 +537,8 @@ onClick={(e) => {
     textAlign: configPortada.horizontal
   }}
   className="
+  pointer-events-auto
+onPointerDown={(e) => e.stopPropagation()}
     bg-transparent
     resize-none
     outline-none
@@ -610,7 +626,7 @@ onClick={(e) => {
                       </div>
 
                       <div className="w-full h-full flex-1 flex flex-col justify-start items-center mt-0 content-center p-0 pt-0 md:p-0 md:pt-0 relative z-10 box-border overflow-hidden">
-                        <div className="w-full flex flex-col justify-center items-center gap-1 md:gap-2 h-full">
+                        <div className="w-full flex flex-col justify-center items-center gap-10 md:gap-2 h-full">
                           {agruparCromos(slotsArray).map((fila, indexFila) => (
                             <div key={`fila-${indexFila}`} className="flex flex-row justify-center items-center gap-2 md:gap-4 w-full">
                               {fila.map(slotId => {
@@ -619,7 +635,7 @@ onClick={(e) => {
                                 const esEspecial = slotId % 2 === 0
 
                                 return (
-                                  <div key={slotId} className="w-[58px] h-[82px] sm:w-[92px] sm:h-[125px] md:w-[110px] md:h-[155px] pointer-events-auto shadow-sm rounded-xl transition-all duration-300">
+                                  <div key={slotId} className="w-[100px] h-[127px] sm:w-[92px] sm:h-[125px] md:w-[110px] md:h-[155px] pointer-events-auto shadow-sm rounded-xl transition-all duration-300">
                                     <label className={`block h-full ${ocupado ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                                       <input
                                         type="file"
@@ -633,7 +649,7 @@ onClick={(e) => {
                                       />
                                       <div className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${
                                         ocupado 
-                                          ? 'border-white bg-white hover:rotate-1 hover:scale-105 shadow-md shadow-black/60' 
+                                          ? 'border-white bg-white hover:brightness-110 shadow-md shadow-black/60' 
                                           : esEspecial
                                             ? 'border-dashed border-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.1)]'
                                             : 'border-dashed border-slate-700 bg-slate-950/90 hover:border-slate-500 hover:bg-slate-900/40'
@@ -677,24 +693,30 @@ onClick={(e) => {
             </div>
 
             {/* BOTÓN DERECHO MEJORADO PARA MÓVILES */}
-            <button
-            style={{ touchAction: 'manipulation' }}
-            onTouchStart={(e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  flipBookRef.current?.pageFlip().flipNext()
-}}
-
-onClick={(e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  flipBookRef.current?.pageFlip().flipNext()
-}}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="absolute right-1 md:right-4 z-[9999] shrink-0 pointer-events-auto bg-slate-800/95 hover:bg-slate-700 active:scale-95 w-11 h-11 md:w-14 md:h-14 rounded-full flex items-center justify-center pb-1 text-slate-200 hover:text-white text-3xl md:text-4xl font-light shadow-[0_0_15px_rgba(0,0,0,0.6)] border border-slate-500/50 backdrop-blur-md transition-all"
-            >
-              ›
-            </button>
+           <button
+  style={{ touchAction: 'manipulation' }}
+  onClick={(e) => {
+    e.stopPropagation()
+    flipBookRef.current?.pageFlip()?.flipNext()
+  }}
+  className="
+    hidden md:flex
+    absolute right-4 top-1/2 -translate-y-1/2
+    z-[9999]
+    w-14 h-14 rounded-full
+    items-center justify-center
+    bg-slate-800/95 hover:bg-slate-700
+    active:scale-95
+    text-slate-200 hover:text-white
+    text-4xl font-light
+    shadow-[0_0_15px_rgba(0,0,0,0.6)]
+    border border-slate-500/50
+    backdrop-blur-md
+    transition-all
+  "
+>
+  ›
+</button>
           </>
         )}
 
@@ -739,32 +761,46 @@ onClick={(e) => {
       </Modal>
 
       <style>{`
-        .real-album-body {
-          background-image: radial-gradient(#1e293b 0.7px, transparent 0.7px);
-          background-size: 16px 16px;
-        }
-        .album-flipbook {
-          background-color: transparent;
-          margin: 0 auto;
-        }
-        .page-sheet {
-          box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
-        }
-        .stf__parent { cursor: default !important; }
-        .stf__block { pointer-events: auto !important; }
-        .page-sheet { pointer-events: auto; }
-        .stf__block, .stf__item, .page-sheet { pointer-events: auto !important; }
+  .real-album-body {
+    background-image: radial-gradient(#1e293b 0.7px, transparent 0.7px);
+    background-size: 16px 16px;
+  }
+  
+  /* Asegura que el contenedor del libro no bloquee los botones laterales */
+  .album-book-container {
+    position: relative;
+    z-index: 10;
+    /* Evitamos que el contenedor del libro capture toques que deberían ir a los botones */
+    pointer-events: auto;
+  }
 
-        .album-book-container {
-          position: relative;
-          z-index: 10;
-        }
-        
-        .stf__parent {
-          cursor: default !important;
-          overflow: visible !important;
-        }
-      `}</style>
+  /* FORZADO DE EVENTOS */
+  .stf__parent { 
+    pointer-events: auto !important; 
+  }
+  
+  /* Esto permite que los botones laterales funcionen aunque el libro esté encima */
+  .stf__wrapper {
+      pointer-events: auto !important;
+
+  }
+
+  .page-sheet { 
+    pointer-events: auto !important; 
+  }
+
+  .album-book-container {
+  overflow: hidden !important;
+  transform: translateZ(0);
+}
+  .stf__parent {
+  overflow: hidden !important;
+}
+
+.stf__block:hover {
+  transform: none !important;
+}
+`}</style>
     </div>
   )
 }

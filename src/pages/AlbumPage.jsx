@@ -1,4 +1,4 @@
-import { useAlbum } from "../hooks/useAlbum"
+import { useAlbum } from "../HOOKS/useAlbum"
 import Pagina from "../components/Pagina"
 
 export default function AlbumPage() {
