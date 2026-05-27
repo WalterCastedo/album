@@ -1,29 +1,28 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from 'react-modal'
-import HTMLFlipBook from 'react-pageflip'
 import { supabase } from './lib/supabase'
 
 Modal.setAppElement('#root')
 
 export default function App() {
-const [album, setAlbum] = useState(null)
+  const [album, setAlbum] = useState(null)
   const [paginas, setPaginas] = useState([])
   const [stickers, setStickers] = useState([])
-  const [paginaActiva, setPaginaActiva] = useState(null)
   const [stickerSeleccionado, setStickerSeleccionado] = useState(null)
   const [menuAbiertoPagina, setMenuAbiertoPagina] = useState(null)
   const [isMobile, setIsMobile] = useState(false)
 
-  const flipBookRef = useRef(null)
-const [configPortada, setConfigPortada] = useState({
-  color: '#ffffff',
-  size: 48,
-  font: 'sans-serif',
-  vertical: 'center',
-  horizontal: 'center'
-})
+  // ESTADO QUE REEMPLAZA EL FLIPBOOK: 0 es la Portada, 1 en adelante son las páginas.
+  const [paginaActualIndex, setPaginaActualIndex] = useState(0)
 
-const [paginaActualFlip, setPaginaActualFlip] = useState(0)
+  const [configPortada, setConfigPortada] = useState({
+    color: '#ffffff',
+    size: 48,
+    font: 'sans-serif',
+    vertical: 'center',
+    horizontal: 'center'
+  })
+
   // DETECTOR RESPONSIVO DE PANTALLA
   useEffect(() => {
     const comprobarPantalla = () => {
@@ -40,67 +39,37 @@ const [paginaActualFlip, setPaginaActualFlip] = useState(0)
     cargarPaginas()
     cargarStickers()
   }, [])
-async function cargarAlbum() {
-  const { data, error } = await supabase
-    .from('album')
-    .select('*')
-    .limit(1)
-    .single()
 
-  if (error) {
-    console.error(error)
-    return
+  async function cargarAlbum() {
+    const { data, error } = await supabase
+      .from('album')
+      .select('*')
+      .limit(1)
+      .single()
+
+    if (error) {
+      console.error(error)
+      return
+    }
+    setAlbum(data)
   }
 
-  setAlbum(data)
-}
-async function actualizarTitulo(titulo) {
-  setAlbum(prev => ({ ...prev, titulo }))
+  async function actualizarTitulo(titulo) {
+    setAlbum(prev => ({ ...prev, titulo }))
+    await supabase.from('album').update({ titulo }).eq('id', album.id)
+  }
 
-  await supabase
-    .from('album')
-    .update({ titulo })
-    .eq('id', album.id)
-}
-async function actualizarConfigAlbum(campo, valor) {
+  async function subirPortada(file) {
+    if (!file) return
+    const imagen = await comprimirImagen(file, 1600, 0.7)
+    const nombre = 'portada-' + Date.now() + imagen.name
+    await supabase.storage.from('stickers').upload(nombre, imagen)
+    const { data } = supabase.storage.from('stickers').getPublicUrl(nombre)
 
-  if (!album) return
+    await supabase.from('album').update({ portada: data.publicUrl }).eq('id', album.id)
+    cargarAlbum()
+  }
 
-  setAlbum(prev => ({
-    ...prev,
-    [campo]: valor
-  }))
-
-  await supabase
-    .from('album')
-    .update({
-      [campo]: valor
-    })
-    .eq('id', album.id)
-}
-async function subirPortada(file) {
-  if (!file) return
-
-  const imagen = await comprimirImagen(file, 1600, 0.7)
-
-  const nombre = 'portada-' + Date.now() + imagen.name
-
-  await supabase.storage
-    .from('stickers')
-    .upload(nombre, imagen)
-
-  const { data } = supabase
-    .storage
-    .from('stickers')
-    .getPublicUrl(nombre)
-
-  await supabase
-    .from('album')
-    .update({ portada: data.publicUrl })
-    .eq('id', album.id)
-
-  cargarAlbum()
-}
   async function cargarPaginas() {
     const { data } = await supabase.from('paginas').select('*').order('created_at', { ascending: true })
 
@@ -111,12 +80,9 @@ async function subirPortada(file) {
         .select()
 
       setPaginas(nueva)
-      setPaginaActiva(nueva[0].id)
       return
     }
-
     setPaginas(data)
-    setPaginaActiva(data[0].id)
   }
 
   async function cargarStickers() {
@@ -163,7 +129,8 @@ async function subirPortada(file) {
     if (error) return console.error(error)
 
     setPaginas(prev => [...prev, data])
-    setPaginaActiva(data.id)
+    // Ir a la nueva página creada
+    setPaginaActualIndex(paginas.length + 1)
   }
 
   async function eliminarPagina(id) {
@@ -176,13 +143,13 @@ async function subirPortada(file) {
     await cargarPaginas()
     await cargarStickers()
 
-    if (paginaActiva === id) setPaginaActiva(null)
+    // Regresar una página atrás si eliminamos la actual
+    setPaginaActualIndex(prev => Math.max(0, prev - 1))
   }
 
   async function renombrarPagina(id) {
     const nuevoNombre = prompt('Nuevo nombre de la página:')
     if (!nuevoNombre) return
-
     setPaginas(prev => prev.map(p => p.id === id ? { ...p, titulo: nuevoNombre } : p))
     await supabase.from('paginas').update({ titulo: nuevoNombre }).eq('id', id)
   }
@@ -218,7 +185,6 @@ async function subirPortada(file) {
     cargarStickers()
   }
 
-  // CONFIGURADOR DE DISTRIBUCIÓN EXACTA
   const agruparCromos = (slots) => {
     const n = slots.length;
     if (n === 1) return [slots];
@@ -233,499 +199,241 @@ async function subirPortada(file) {
     return [slots];
   };
 
+  const pagActualObj = paginaActualIndex > 0 ? paginas[paginaActualIndex - 1] : null;
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-1 md:p-3 font-sans selection:bg-pink-500 overflow-y-auto overflow-x-hidden real-album-body flex flex-col">
       
       <header className="max-w-5xl mx-auto text-center mb-2 select-none z-50">
-
-  <span className="inline-block bg-gradient-to-r from-pink-500/10 to-amber-500/10 text-pink-400 text-[10px] md:text-xs font-bold tracking-widest uppercase px-3 py-0.5 rounded-full border border-pink-500/20 shadow-sm">
-    Álbum
-  </span>
-
-  <div className="flex flex-col items-center gap-3 mt-2">
-
-   
-
-    {/* TÍTULO */}
-    <input
-      type="text"
-      value={album?.titulo || ''}
-      disabled
-      placeholder="Título del álbum"
-      className="bg-transparent text-center text-xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-pink-400 via-rose-300 to-amber-300 bg-clip-text text-transparent outline-none border-b border-pink-500/20 focus:border-pink-400 px-2 py-1 max-w-[90vw]"
-    />
-
-  </div>
-</header>
+        <span className="inline-block bg-gradient-to-r from-pink-500/10 to-amber-500/10 text-pink-400 text-[10px] md:text-xs font-bold tracking-widest uppercase px-3 py-0.5 rounded-full border border-pink-500/20 shadow-sm">
+          Álbum
+        </span>
+        <div className="flex flex-col items-center gap-3 mt-2">
+          <input
+            type="text"
+            value={album?.titulo || ''}
+            disabled
+            placeholder="Título del álbum"
+            className="bg-transparent text-center text-xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-pink-400 via-rose-300 to-amber-300 bg-clip-text text-transparent outline-none border-b border-pink-500/20 focus:border-pink-400 px-2 py-1 max-w-[90vw]"
+          />
+        </div>
+      </header>
 
       <div className="w-full max-w-[1200px] mx-auto mb-3 min-h-[90px] relative flex items-center justify-center">
+        {/* CONFIGURADOR PORTADA */}
+        <div
+          className={`absolute inset-0 bg-slate-950/95 border border-slate-700 rounded-2xl px-3 py-2 backdrop-blur-xl shadow-2xl flex flex-wrap items-center justify-center gap-2 w-full min-w-0 overflow-x-auto transition-all duration-300 ${paginaActualIndex === 0 ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none scale-95'}`}
+        >
+          <input
+            type="text"
+            value={album?.titulo || ''}
+            onChange={(e) => actualizarTitulo(e.target.value)}
+            placeholder="Título del álbum"
+            className="bg-slate-800 text-white px-3 py-2 rounded-xl text-sm outline-none border border-slate-700 w-full sm:w-[160px] min-w-0 flex-1 flex-shrink"
+          />
+          <label className="cursor-pointer bg-pink-600 hover:bg-pink-500 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap">
+            Cambiar portada
+            <input type="file" hidden onChange={(e) => subirPortada(e.target.files?.[0])} />
+          </label>
+          <input type="color" value={configPortada.color} onChange={(e) => setConfigPortada(prev => ({ ...prev, color: e.target.value }))} className="w-8 h-8 rounded cursor-pointer flex-shrink-0" />
+          <input type="range" min="20" max="90" value={configPortada.size} onChange={(e) => setConfigPortada(prev => ({ ...prev, size: Number(e.target.value) }))} className="w-[80px] sm:w-[100px] flex-shrink min-w-0" />
+          <select value={configPortada.font} onChange={(e) => setConfigPortada(prev => ({ ...prev, font: e.target.value }))} className="bg-slate-800 px-2 py-2 rounded text-xs flex-shrink min-w-0">
+            <option value="sans-serif">Sans</option>
+            <option value="serif">Serif</option>
+            <option value="monospace">Mono</option>
+            <option value="cursive">Cursive</option>
+          </select>
+          <select value={configPortada.vertical} onChange={(e) => setConfigPortada(prev => ({ ...prev, vertical: e.target.value }))} className="bg-slate-800 px-2 py-2 rounded text-xs flex-shrink min-w-0">
+            <option value="top">Arriba</option>
+            <option value="center">Centro</option>
+            <option value="bottom">Abajo</option>
+          </select>
+          <select value={configPortada.horizontal} onChange={(e) => setConfigPortada(prev => ({ ...prev, horizontal: e.target.value }))} className="bg-slate-800 px-2 py-2 rounded text-xs flex-shrink min-w-0">
+            <option value="left">Izquierda</option>
+            <option value="center">Centro</option>
+            <option value="right">Derecha</option>
+          </select>
+        </div>
 
-  {/* CONFIGURADOR PORTADA (SIEMPRE EXISTE) */}
-  <div
-  className={`
-    absolute inset-0
-    bg-slate-950/95 border border-slate-700 rounded-2xl px-3 py-2
-    backdrop-blur-xl shadow-2xl
-    flex flex-wrap items-center justify-center gap-2
-w-full min-w-0 overflow-x-auto
-    transition-all duration-300
-    ${paginaActualFlip === 0 ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none scale-95'}
-  `}
->
-    {/* INPUT TÍTULO */}
-    <input
-      type="text"
-      value={album?.titulo || ''}
-      onChange={(e) => actualizarTitulo(e.target.value)}
-      placeholder="Título del álbum"
-      className="
-bg-slate-800 text-white px-3 py-2 rounded-xl text-sm outline-none border border-slate-700
-w-full sm:w-[160px] min-w-0 flex-1 min-w-0 flex-shrink
-"
-    />
-
-    {/* SUBIR PORTADA */}
-    <label className="cursor-pointer bg-pink-600 hover:bg-pink-500 px-3 py-2 rounded-xl text-xs font-bold">
-      Cambiar portada
-      <input
-        type="file"
-        hidden
-        onChange={(e) => subirPortada(e.target.files?.[0])}
-      />
-    </label>
-
-    {/* COLOR */}
-    <input
-      type="color"
-      value={configPortada.color}
-      onChange={(e) =>
-        setConfigPortada(prev => ({
-          ...prev,
-          color: e.target.value
-        }))
-      }
-      className="w-8 h-8 rounded cursor-pointer flex-shrink-0"
-    />
-
-    {/* TAMAÑO */}
-    <input
-      type="range"
-      min="20"
-      max="90"
-      value={configPortada.size}
-      onChange={(e) =>
-        setConfigPortada(prev => ({
-          ...prev,
-          size: Number(e.target.value)
-        }))
-      }
-      className="w-[100px] max-w-[30vw] flex-shrink min-w-0"
-    />
-
-    {/* FUENTE */}
-    <select
-      value={configPortada.font}
-      onChange={(e) =>
-        setConfigPortada(prev => ({
-          ...prev,
-          font: e.target.value
-        }))
-      }
-      className="
-bg-slate-800 px-2 py-2 rounded text-xs
-flex-shrink min-w-0 max-w-[35vw]
-"
-    >
-      <option value="sans-serif">Sans</option>
-      <option value="serif">Serif</option>
-      <option value="monospace">Mono</option>
-      <option value="cursive">Cursive</option>
-    </select>
-
-    {/* VERTICAL */}
-    <select
-      value={configPortada.vertical}
-      onChange={(e) =>
-        setConfigPortada(prev => ({
-          ...prev,
-          vertical: e.target.value
-        }))
-      }
-       className="
-bg-slate-800 px-2 py-2 rounded text-xs
-flex-shrink min-w-0 max-w-[35vw]
-"
-    >
-      <option value="top">Arriba</option>
-      <option value="center">Centro</option>
-      <option value="bottom">Abajo</option>
-    </select>
-
-    {/* HORIZONTAL */}
-    <select
-      value={configPortada.horizontal}
-      onChange={(e) =>
-        setConfigPortada(prev => ({
-          ...prev,
-          horizontal: e.target.value
-        }))
-      }
-       className="
-bg-slate-800 px-2 py-2 rounded text-xs
-flex-shrink min-w-0 max-w-[35vw]
-"
-    >
-      <option value="left">Izquierda</option>
-      <option value="center">Centro</option>
-      <option value="right">Derecha</option>
-    </select>
-  </div>
-
-  {/* BOTÓN CREAR PÁGINA (SIEMPRE EXISTE) */}
-  <div
-    className={`
-      absolute inset-0 flex items-center justify-center
-      transition-all duration-300
-      ${paginaActualFlip !== 0 ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none scale-95'}
-    `}
-  >
-    <button
-      onClick={crearPagina}
-      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 px-4 py-1.5 rounded-xl text-[10px] md:text-xs font-bold tracking-wider uppercase transition-all shadow-lg shadow-emerald-950/40"
-    >
-      ＋ Añadir Nueva Hoja
-    </button>
-  </div>
-
-</div>
-      {/* CONTENEDOR DE NAVEGACIÓN Y ÁLBUM */}
-      <div className="w-full max-w-[1200px] mx-auto flex flex-col md:flex-row items-start justify-between my-0 px-1 sm:px-4 relative">
-        
-        {paginas.length > 0 && (
-          <>
-            {/* BOTÓN IZQUIERDO MEJORADO PARA MÓVILES */}
-           <button
-  style={{ touchAction: 'manipulation' }}
-  onClick={(e) => {
-    e.stopPropagation()
-    flipBookRef.current?.pageFlip()?.flipPrev()
-  }}
-  className="
-    hidden md:flex
-    absolute left-4 top-1/2 -translate-y-1/2
-    z-[9999]
-    w-14 h-14 rounded-full
-    items-center justify-center
-    bg-slate-800/95 hover:bg-slate-700
-    active:scale-95
-    text-slate-200 hover:text-white
-    text-4xl font-light
-    shadow-[0_0_15px_rgba(0,0,0,0.6)]
-    border border-slate-500/50
-    backdrop-blur-md
-    transition-all
-  "
->
-  ‹
-</button>
-
-            {/* CONTENEDOR DEL LIBRO (Centrado) */}
-            <div
-  className="z-50 pointer-events-auto album-book-container relative w-full max-w-[340px] sm:max-w-[420px] md:max-w-[1000px] h-[75vh] md:h-[650px] p-0 md:p-1 bg-slate-900 rounded-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.85)] overflow-hidden z-10 mx-auto"  style={{
-    touchAction: 'none',
-    overscrollBehavior: 'contain'
-  }}
->  
-              {!isMobile && (
-                <div className="absolute  left-1/2 top-0 bottom-0 w-6 bg-gradient-to-r from-black/50 via-black/15 to-black/50 -translate-x-1/2 z-40 pointer-events-none border-x border-black/30" />
-              )}
-
-             <HTMLFlipBook
-  width={500}
-  height={isMobile ? window.innerHeight : 650}
-
-  size="stretch"
-  minWidth={280}
-  maxWidth={500}
-  minHeight={isMobile ? 560 : 500}
-  maxHeight={650}
-  maxShadowOpacity={0.6}
-  showCover={true}
-
-  // 🔴 DESACTIVAR INTERACCIÓN MOUSE / DRAG
-  useMouseEvents={true}
-  clickEventForward={false}
-  disableFlipByClick={true}
-  mobileScrollSupport={false}
-  swipeDistance={9999}
-
-  drawShadow={true}
-  startPage={0}
-  mode={isMobile ? 'portrait' : 'landscape'}
-
-  onFlip={(e) => {
-    const index = e.data
-    setPaginaActualFlip(index)
-
-    if (index > 0 && paginas[index - 1]) {
-      setPaginaActiva(paginas[index - 1].id)
-    }
-  }}
-
-  ref={flipBookRef}
->
-           {/* PORTADA DEL ÁLBUM */}
-<div
-  className="w-full h-full relative overflow-hidden bg-black"
-  onPointerDown={(e) => e.stopPropagation()}
->
-  {/* IMAGEN */}
-  {album?.portada ? (
-    <img
-      src={album.portada}
-      alt="Portada"
-      className="absolute inset-0 w-full h-full object-cover"
-    />
-  ) : (
-    <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-      <span className="text-8xl">📖</span>
-    </div>
-  )}
-
-  {/* OVERLAY */}
-  <div className="absolute inset-0 bg-black/25" />
-
-  {/* TÍTULO */}
-  <div
-    className="absolute inset-0 flex p-6 pointer-events-none"
-
-  style={{
-    justifyContent:
-      isMobile
-        ? 'center'
-        : configPortada.horizontal === 'left'
-        ? 'flex-start'
-        : configPortada.horizontal === 'center'
-        ? 'center'
-        : 'flex-end',
-
-    alignItems:
-      configPortada.vertical === 'top'
-        ? 'flex-start'
-        : configPortada.vertical === 'center'
-        ? 'center'
-        : 'flex-end',
-
-    textAlign: isMobile ? 'center' : configPortada.horizontal
-  }}
->
-    <textarea
-    
-  value={album?.titulo || ''}
-  onChange={(e) => {
-    if (paginaActualFlip === 0) {
-      actualizarTitulo(e.target.value)
-    }
-  }}
-  readOnly={paginaActualFlip !== 0}
-  rows={2}
-  style={{
-    color: configPortada.color,
-    fontSize: `clamp(18px, ${configPortada.size / 12}vw, ${configPortada.size}px)`,
-    fontFamily: configPortada.font,
-    lineHeight: 1.1,
-    textAlign: configPortada.horizontal
-  }}
-  className="
-  pointer-events-auto
-onPointerDown={(e) => e.stopPropagation()}
-    bg-transparent
-    resize-none
-    outline-none
-    font-black
-    overflow-hidden
-    max-w-[100%]
-    min-w-[120px]
-  "
-/>
-  </div>
-
-</div>
-                {paginas.map((pag, index) => {
-                  const totalCromos = Math.min(pag.cantidad_fotos || 6, 9);
-                  const slotsArray = Array.from({ length: totalCromos }, (_, i) => i + 1);
-                  const stickersPagina = stickers.filter(s => s.pagina_id === pag.id);
-                  
-                  const esPaginaDerecha = !isMobile && index % 2 !== 0;
-
-                  return (
-                    <div key={pag.id} className="w-full h-full pb-15 bg-slate-900 relative overflow-hidden select-none page-sheet flex flex-col justify-between">
-                      
-                      <div 
-                        className="absolute inset-0 z-0 pointer-events-none"
-                        style={{
-                          backgroundImage: pag.fondo
-                            ? `linear-gradient(rgba(15, 23, 42, 0.15), rgba(15, 23, 42, 0.4)), url("${pag.fondo}")`
-                            : 'radial-gradient(circle at center, #1e293b 1.2px, transparent 1.2px)',
-                          backgroundSize: pag.fondo ? 'cover' : '24px 24px',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: pag.fondo ? 'no-repeat' : 'repeat'
-                        }}
-                      />
-
-                      <div 
-                        className={`w-full flex justify-between items-center bg-slate-950/95 backdrop-blur-md px-3 py-2 md:px-4 md:py-3 border-b border-white/10 z-50 relative shrink-0 ${
-                          esPaginaDerecha ? 'flex-row-reverse' : 'flex-row'
-                        }`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className={`flex flex-col min-w-0 ${esPaginaDerecha ? 'items-end text-right' : 'items-start text-left'}`}>
-                          <span className="text-[11px] md:text-xs font-black tracking-wide text-slate-100 truncate max-w-[120px] md:max-w-[240px]">
-                            {pag.titulo}
-                          </span>
-                          <span className="text-[8px] md:text-[9px] font-mono font-bold text-slate-400 mt-0.5">
-                            PÁGINA {index + 1 < 10 ? `0${index + 1}` : index + 1} / {paginas.length}
-                          </span>
-                        </div>
-
-                        <div className="relative">
-                          <button
-                            onClick={() => setMenuAbiertoPagina(menuAbiertoPagina === pag.id ? null : pag.id)}
-                            className="bg-slate-900 hover:bg-slate-800 px-2 py-0.5 md:px-2.5 md:py-1 rounded-xl text-[10px] md:text-[11px] font-bold border border-slate-700 text-slate-200 flex items-center gap-1 transition-all active:scale-95 shadow-sm pointer-events-auto"
-                          >
-                            ⚙️ Ver opciones
-                          </button>
-
-                          {menuAbiertoPagina === pag.id && (
-                            <div className={`absolute mt-2 w-44 bg-slate-950/95 border border-slate-800 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.6)] z-50 py-1 overflow-hidden backdrop-blur-md ${
-                              esPaginaDerecha ? 'left-0' : 'right-0'
-                            }`}>
-                              <button
-                                onClick={() => { renombrarPagina(pag.id); setMenuAbiertoPagina(null); }}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-900 transition-colors text-slate-300 flex items-center gap-2 pointer-events-auto"
-                              >
-                                ✏️ Renombrar Hoja
-                              </button>
-                              
-                              <label className="w-full text-left px-3 py-2 text-xs hover:bg-slate-900 transition-colors text-slate-300 flex items-center gap-2 cursor-pointer block pointer-events-auto">
-                                🖼️ Cambiar Fondo
-                                <input type="file" hidden onChange={(e) => { subirFondo(e.target.files?.[0], pag.id); setMenuAbiertoPagina(null); }} />
-                              </label>
-                              
-                              <div className="border-t border-slate-900 my-1" />
-                              
-                              <button
-                                onClick={() => { eliminarPagina(pag.id); setMenuAbiertoPagina(null); }}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-red-950/40 hover:text-red-400 transition-colors text-red-400/90 flex items-center gap-2 font-medium pointer-events-auto"
-                              >
-                                🗑️ Eliminar Hoja
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="w-full h-full flex-1 flex flex-col justify-start items-center mt-0 content-center p-0 pt-0 md:p-0 md:pt-0 relative z-10 box-border overflow-hidden">
-                        <div className="w-full flex flex-col justify-center items-center gap-10 md:gap-2 h-full">
-                          {agruparCromos(slotsArray).map((fila, indexFila) => (
-                            <div key={`fila-${indexFila}`} className="flex flex-row justify-center items-center gap-2 md:gap-4 w-full">
-                              {fila.map(slotId => {
-                                const sticker = stickersPagina.find(s => s.slot_id === slotId)
-                                const ocupado = !!sticker
-                                const esEspecial = slotId % 2 === 0
-
-                                return (
-                                  <div key={slotId} className="w-[100px] h-[127px] sm:w-[92px] sm:h-[125px] md:w-[110px] md:h-[155px] pointer-events-auto shadow-sm rounded-xl transition-all duration-300">
-                                    <label className={`block h-full ${ocupado ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                                      <input
-                                        type="file"
-                                        hidden
-                                        disabled={ocupado}
-                                        onChange={async (e) => {
-                                          if (ocupado || !e.target.files?.[0]) return
-                                          const file = await comprimirImagen(e.target.files[0])
-                                          subirStickerSlot(file, pag.id, slotId)
-                                        }}
-                                      />
-                                      <div className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${
-                                        ocupado 
-                                          ? 'border-white bg-white hover:brightness-110 shadow-md shadow-black/60' 
-                                          : esEspecial
-                                            ? 'border-dashed border-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.1)]'
-                                            : 'border-dashed border-slate-700 bg-slate-950/90 hover:border-slate-500 hover:bg-slate-900/40'
-                                      }`}>
-                                        {sticker ? (
-                                          <div className="w-full h-full p-0.5 bg-white relative group pointer-events-auto">
-                                            <img
-                                              src={sticker.image}
-                                              className="w-full h-full object-cover rounded-lg cursor-pointer"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setStickerSeleccionado(sticker);
-                                              }}
-                                              alt="Cromo"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col items-center justify-center select-none text-center p-0.5 pointer-events-none">
-                                            <span className={`text-[6.5px] md:text-[9px] font-mono tracking-tighter uppercase font-bold ${esEspecial ? 'text-amber-400' : 'text-slate-600'}`}>
-                                              {esEspecial ? '★ BRILL' : 'CROMO'}
-                                            </span>
-                                            <span className={`text-xs md:text-xl font-black tracking-tighter font-mono ${esEspecial ? 'text-amber-300' : 'text-slate-500'}`}>
-                                              {slotId < 10 ? `0${slotId}` : slotId}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </label>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </HTMLFlipBook>
-            </div>
-
-            {/* BOTÓN DERECHO MEJORADO PARA MÓVILES */}
-           <button
-  style={{ touchAction: 'manipulation' }}
-  onClick={(e) => {
-    e.stopPropagation()
-    flipBookRef.current?.pageFlip()?.flipNext()
-  }}
-  className="
-    hidden md:flex
-    absolute right-4 top-1/2 -translate-y-1/2
-    z-[9999]
-    w-14 h-14 rounded-full
-    items-center justify-center
-    bg-slate-800/95 hover:bg-slate-700
-    active:scale-95
-    text-slate-200 hover:text-white
-    text-4xl font-light
-    shadow-[0_0_15px_rgba(0,0,0,0.6)]
-    border border-slate-500/50
-    backdrop-blur-md
-    transition-all
-  "
->
-  ›
-</button>
-          </>
-        )}
-
+        {/* BOTÓN CREAR PÁGINA */}
+        <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${paginaActualIndex !== 0 ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none scale-95'}`}>
+          <button onClick={crearPagina} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 px-4 py-2 rounded-xl text-[10px] md:text-xs font-bold tracking-wider uppercase transition-all shadow-lg shadow-emerald-950/40">
+            ＋ Añadir Nueva Hoja
+          </button>
+        </div>
       </div>
 
-      <footer className="text-center py-1 text-[9px] text-slate-600 select-none shrink-0 z-50">
+      {/* CONTENEDOR DE NAVEGACIÓN Y ÁLBUM */}
+      <div className="w-full max-w-[1200px] mx-auto flex flex-col md:flex-row items-center justify-center my-0 px-2 sm:px-4 relative min-h-[75vh] md:min-h-[650px]">
+        
+        {/* BOTÓN IZQUIERDO */}
+        {paginaActualIndex > 0 && (
+          <button
+            onClick={() => setPaginaActualIndex(prev => Math.max(0, prev - 1))}
+            className="absolute left-0 sm:left-4 top-1/2 -translate-y-1/2 z-[9999] w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center bg-slate-800/95 hover:bg-slate-700 active:scale-95 text-slate-200 hover:text-white text-3xl md:text-4xl font-light shadow-xl border border-slate-500/50 backdrop-blur-md transition-all"
+          >
+            ‹
+          </button>
+        )}
+
+        {/* CONTENEDOR PRINCIPAL DEL ÁLBUM (CARD) */}
+        <div key={paginaActualIndex} className="animate-in fade-in zoom-in-95 duration-300 w-full max-w-[420px] md:max-w-[500px] h-[75vh] md:h-[650px] bg-slate-900 rounded-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.85)] overflow-hidden relative mx-auto flex flex-col">
+          
+          {/* ================= VISTA: PORTADA ================= */}
+          {paginaActualIndex === 0 && (
+            <div className="w-full h-full relative overflow-hidden bg-black flex-1">
+              {album?.portada ? (
+                <img src={album.portada} alt="Portada" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+                  <span className="text-8xl">📖</span>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+              <div
+                className="absolute inset-0 flex p-6 pointer-events-none"
+                style={{
+                  justifyContent: configPortada.horizontal === 'left' ? 'flex-start' : configPortada.horizontal === 'center' ? 'center' : 'flex-end',
+                  alignItems: configPortada.vertical === 'top' ? 'flex-start' : configPortada.vertical === 'center' ? 'center' : 'flex-end',
+                  textAlign: configPortada.horizontal
+                }}
+              >
+                <textarea
+                  value={album?.titulo || ''}
+                  onChange={(e) => actualizarTitulo(e.target.value)}
+                  rows={3}
+                  style={{
+                    color: configPortada.color,
+                    fontSize: `clamp(24px, ${configPortada.size / 10}vw, ${configPortada.size}px)`,
+                    fontFamily: configPortada.font,
+                    lineHeight: 1.1,
+                    textAlign: configPortada.horizontal
+                  }}
+                  className="pointer-events-auto bg-transparent resize-none outline-none font-black overflow-hidden w-full"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ================= VISTA: PÁGINAS INTERNAS ================= */}
+          {paginaActualIndex > 0 && pagActualObj && (
+            <div className="w-full h-full pb-10 bg-slate-900 relative overflow-hidden select-none flex flex-col justify-between flex-1">
+              {/* FONDO DE PÁGINA */}
+              <div 
+                className="absolute inset-0 z-0 pointer-events-none"
+                style={{
+                  backgroundImage: pagActualObj.fondo ? `linear-gradient(rgba(15, 23, 42, 0.15), rgba(15, 23, 42, 0.4)), url("${pagActualObj.fondo}")` : 'radial-gradient(circle at center, #1e293b 1.2px, transparent 1.2px)',
+                  backgroundSize: pagActualObj.fondo ? 'cover' : '24px 24px',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: pagActualObj.fondo ? 'no-repeat' : 'repeat'
+                }}
+              />
+
+              {/* HEADER DE LA PÁGINA */}
+              <div className="w-full flex justify-between items-center bg-slate-950/95 backdrop-blur-md px-4 py-3 border-b border-white/10 z-50 relative shrink-0">
+                <div className="flex flex-col min-w-0 items-start text-left">
+                  <span className="text-[12px] md:text-sm font-black tracking-wide text-slate-100 truncate max-w-[180px] md:max-w-[240px]">
+                    {pagActualObj.titulo}
+                  </span>
+                  <span className="text-[9px] md:text-[10px] font-mono font-bold text-slate-400 mt-0.5">
+                    PÁGINA {paginaActualIndex < 10 ? `0${paginaActualIndex}` : paginaActualIndex} / {paginas.length}
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <button
+                    onClick={() => setMenuAbiertoPagina(menuAbiertoPagina === pagActualObj.id ? null : pagActualObj.id)}
+                    className="bg-slate-900 hover:bg-slate-800 px-3 py-1.5 rounded-xl text-[11px] font-bold border border-slate-700 text-slate-200 flex items-center gap-1 transition-all active:scale-95 shadow-sm"
+                  >
+                    ⚙️ Opciones
+                  </button>
+
+                  {menuAbiertoPagina === pagActualObj.id && (
+                    <div className="absolute right-0 mt-2 w-44 bg-slate-950/95 border border-slate-800 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.6)] z-50 py-1 overflow-hidden backdrop-blur-md">
+                      <button onClick={() => { renombrarPagina(pagActualObj.id); setMenuAbiertoPagina(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-900 transition-colors text-slate-300 flex items-center gap-2">
+                        ✏️ Renombrar Hoja
+                      </button>
+                      <label className="w-full text-left px-3 py-2 text-xs hover:bg-slate-900 transition-colors text-slate-300 flex items-center gap-2 cursor-pointer block">
+                        🖼️ Cambiar Fondo
+                        <input type="file" hidden onChange={(e) => { subirFondo(e.target.files?.[0], pagActualObj.id); setMenuAbiertoPagina(null); }} />
+                      </label>
+                      <div className="border-t border-slate-900 my-1" />
+                      <button onClick={() => { eliminarPagina(pagActualObj.id); setMenuAbiertoPagina(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-950/40 hover:text-red-400 transition-colors text-red-400/90 flex items-center gap-2 font-medium">
+                        🗑️ Eliminar Hoja
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* CONTENIDO (SLOTS DE CROMOS) */}
+              <div className="w-full h-full flex-1 flex flex-col justify-start items-center mt-2 content-center p-2 md:p-4 relative z-10 box-border overflow-y-auto overflow-x-hidden custom-scrollbar">
+                <div className="w-full flex flex-col justify-center items-center gap-4 h-full">
+                  {agruparCromos(Array.from({ length: Math.min(pagActualObj.cantidad_fotos || 6, 9) }, (_, i) => i + 1)).map((fila, indexFila) => (
+                    <div key={`fila-${indexFila}`} className="flex flex-row justify-center items-center gap-3 w-full">
+                      {fila.map(slotId => {
+                        const sticker = stickers.filter(s => s.pagina_id === pagActualObj.id).find(s => s.slot_id === slotId)
+                        const ocupado = !!sticker
+                        const esEspecial = slotId % 2 === 0
+
+                        return (
+                          <div key={slotId} className="w-[100px] h-[127px] sm:w-[110px] sm:h-[140px] md:w-[125px] md:h-[165px] pointer-events-auto shadow-sm rounded-xl transition-all duration-300 shrink-0">
+                            <label className={`block h-full ${ocupado ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <input
+                                type="file"
+                                hidden
+                                disabled={ocupado}
+                                onChange={async (e) => {
+                                  if (ocupado || !e.target.files?.[0]) return
+                                  const file = await comprimirImagen(e.target.files[0])
+                                  subirStickerSlot(file, pagActualObj.id, slotId)
+                                }}
+                              />
+                              <div className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${ocupado ? 'border-white bg-white hover:brightness-110 shadow-md shadow-black/60' : esEspecial ? 'border-dashed border-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.1)]' : 'border-dashed border-slate-700 bg-slate-950/90 hover:border-slate-500 hover:bg-slate-900/40'}`}>
+                                {sticker ? (
+                                  <div className="w-full h-full p-0.5 bg-white relative group">
+                                    <img src={sticker.image} className="w-full h-full object-cover rounded-lg cursor-pointer" onClick={(e) => { e.preventDefault(); setStickerSeleccionado(sticker); }} alt="Cromo" />
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center select-none text-center p-0.5 pointer-events-none">
+                                    <span className={`text-[8px] md:text-[10px] font-mono tracking-tighter uppercase font-bold ${esEspecial ? 'text-amber-400' : 'text-slate-600'}`}>
+                                      {esEspecial ? '★ BRILL' : 'CROMO'}
+                                    </span>
+                                    <span className={`text-sm md:text-2xl font-black tracking-tighter font-mono ${esEspecial ? 'text-amber-300' : 'text-slate-500'}`}>
+                                      {slotId < 10 ? `0${slotId}` : slotId}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* BOTÓN DERECHO */}
+        {paginaActualIndex < paginas.length && (
+          <button
+            onClick={() => setPaginaActualIndex(prev => Math.min(paginas.length, prev + 1))}
+            className="absolute right-0 sm:right-4 top-1/2 -translate-y-1/2 z-[9999] w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center bg-slate-800/95 hover:bg-slate-700 active:scale-95 text-slate-200 hover:text-white text-3xl md:text-4xl font-light shadow-xl border border-slate-500/50 backdrop-blur-md transition-all"
+          >
+            ›
+          </button>
+        )}
+      </div>
+
+      <footer className="text-center py-2 text-[10px] text-slate-600 select-none shrink-0 z-50">
         Álbum Virtual • Diseñado con Amor
       </footer>
 
+      {/* MODAL PARA VER CROMO EN GRANDE */}
       <Modal
         isOpen={!!stickerSeleccionado}
         onRequestClose={() => setStickerSeleccionado(null)}
@@ -740,19 +448,10 @@ onPointerDown={(e) => e.stopPropagation()}
               <img src={stickerSeleccionado.image} className="max-h-[55vh] object-contain rounded-xl" alt="Cromo ampliado" />
             </div>
             <div className="flex gap-2 w-full justify-center">
-              <button
-                onClick={async () => {
-                  await eliminarSticker(stickerSeleccionado.id)
-                  setStickerSeleccionado(null)
-                }}
-                className="bg-red-600 hover:bg-red-500 active:scale-95 px-4 py-2 rounded-xl font-bold text-xs tracking-wide transition-all shadow-lg text-white"
-              >
+              <button onClick={async () => { await eliminarSticker(stickerSeleccionado.id); setStickerSeleccionado(null); }} className="bg-red-600 hover:bg-red-500 active:scale-95 px-4 py-2 rounded-xl font-bold text-xs tracking-wide transition-all shadow-lg text-white">
                 Despegar Cromo
               </button>
-              <button
-                onClick={() => setStickerSeleccionado(null)}
-                className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl font-bold text-xs tracking-wide text-white transition-all border border-slate-700"
-              >
+              <button onClick={() => setStickerSeleccionado(null)} className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl font-bold text-xs tracking-wide text-white transition-all border border-slate-700">
                 Cerrar
               </button>
             </div>
@@ -761,46 +460,23 @@ onPointerDown={(e) => e.stopPropagation()}
       </Modal>
 
       <style>{`
-  .real-album-body {
-    background-image: radial-gradient(#1e293b 0.7px, transparent 0.7px);
-    background-size: 16px 16px;
-  }
-  
-  /* Asegura que el contenedor del libro no bloquee los botones laterales */
-  .album-book-container {
-    position: relative;
-    z-index: 10;
-    /* Evitamos que el contenedor del libro capture toques que deberían ir a los botones */
-    pointer-events: auto;
-  }
-
-  /* FORZADO DE EVENTOS */
-  .stf__parent { 
-    pointer-events: auto !important; 
-  }
-  
-  /* Esto permite que los botones laterales funcionen aunque el libro esté encima */
-  .stf__wrapper {
-      pointer-events: auto !important;
-
-  }
-
-  .page-sheet { 
-    pointer-events: auto !important; 
-  }
-
-  .album-book-container {
-  overflow: hidden !important;
-  transform: translateZ(0);
-}
-  .stf__parent {
-  overflow: hidden !important;
-}
-
-.stf__block:hover {
-  transform: none !important;
-}
-`}</style>
+        .real-album-body {
+          background-image: radial-gradient(#1e293b 0.7px, transparent 0.7px);
+          background-size: 16px 16px;
+        }
+        
+        /* Oculta la barra de scroll dentro del álbum pero permite arrastrar hacia abajo si hay mucho contenido */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(255,255,255,0.1);
+          border-radius: 10px;
+        }
+      `}</style>
     </div>
   )
 }
