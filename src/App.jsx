@@ -280,7 +280,6 @@ export default function App() {
         {/* CONTENIDO INTERACTIVO */}
         <div className="relative z-10 w-full h-full pb-6 select-none flex flex-col justify-between">
           
-          {/* AQUÍ ESTÁ EL ARREGLO: relative z-[100] fuerza a la barra a estar SIEMPRE por encima de los cromos */}
           <div className={`relative z-[100] w-full flex justify-between items-center bg-slate-950/90 backdrop-blur-md px-4 py-2 border-b border-white/10 shrink-0 ${isLeftPage ? 'flex-row' : 'flex-row-reverse'}`}>
             <div className={`flex flex-col min-w-0 ${isLeftPage ? 'items-start text-left' : 'items-end text-right'}`}>
               <span className="text-[12px] md:text-sm font-black tracking-wide text-slate-100 truncate max-w-[150px] md:max-w-[200px]">
@@ -297,7 +296,8 @@ export default function App() {
               {menuAbiertoPagina === item.id && (
                 <div className={`absolute top-full mt-2 w-44 bg-slate-950/95 border border-slate-700 rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.9)] z-[99999] py-1 backdrop-blur-xl ${isLeftPage ? 'right-0' : 'left-0'}`}>
                   <button onClick={() => { renombrarPagina(item.id); setMenuAbiertoPagina(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300">✏️ Renombrar Hoja</button>
-                  <label className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 cursor-pointer block">🖼️ Cambiar Fondo <input type="file" hidden onChange={(e) => { subirFondo(e.target.files?.[0], item.id); setMenuAbiertoPagina(null); }} /></label>
+                  {/* AQUÍ ESTÁ EL ACCEPT="IMAGE/*" PARA EL FONDO */}
+                  <label className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 cursor-pointer block">🖼️ Cambiar Fondo <input type="file" accept="image/*" hidden onChange={(e) => { subirFondo(e.target.files?.[0], item.id); setMenuAbiertoPagina(null); }} /></label>
                   <div className="border-t border-slate-800 my-1" />
                   <button onClick={() => { eliminarPagina(item.id); setMenuAbiertoPagina(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-900/50 text-red-400 font-medium">🗑️ Eliminar Hoja</button>
                 </div>
@@ -317,7 +317,8 @@ export default function App() {
                     return (
                       <div key={slotId} className="w-[95px] h-[120px] sm:w-[100px] sm:h-[130px] md:w-[115px] md:h-[150px] pointer-events-auto shadow-md rounded-xl transition-all duration-300 shrink-0">
                         <label className={`block h-full ${ocupado ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                          <input type="file" hidden disabled={ocupado} onChange={async (e) => { if (ocupado || !e.target.files?.[0]) return; const file = await comprimirImagen(e.target.files[0]); subirStickerSlot(file, item.id, slotId); }} />
+                          {/* AQUÍ ESTÁ EL ACCEPT="IMAGE/*" PARA LOS CROMOS */}
+                          <input type="file" accept="image/*" hidden disabled={ocupado} onChange={async (e) => { if (ocupado || !e.target.files?.[0]) return; const file = await comprimirImagen(e.target.files[0]); subirStickerSlot(file, item.id, slotId); }} />
                           <div className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${ocupado ? 'border-white bg-white hover:brightness-110 shadow-lg shadow-black/80' : esEspecial ? 'border-dashed border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/20 shadow-[inset_0_0_8px_rgba(245,158,11,0.15)]' : 'border-dashed border-slate-600 bg-slate-950/80 hover:border-slate-400 hover:bg-slate-900/60'}`}>
                             {sticker ? (
                               <div className="w-full h-full p-0.5 bg-white relative group">
@@ -365,16 +366,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* BARRA DE HERRAMIENTAS */}
+      {/* BARRA DE HERRAMIENTAS - ARREGLO DEL DESBORDAMIENTO (CARRUSEL HORIZONTAL) */}
       <div className="w-full max-w-[1200px] mx-auto mb-3 min-h-[70px] relative flex items-center justify-center z-50">
-        <div className={`absolute inset-0 bg-slate-900/95 border border-slate-700 rounded-2xl px-3 py-2 backdrop-blur-xl shadow-xl flex flex-wrap items-center justify-center gap-2 w-full transition-all duration-300 ${isViewingCover ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible pointer-events-none -translate-y-4'}`}>
-          <input type="text" value={album?.titulo || ''} onChange={(e) => actualizarTitulo(e.target.value)} placeholder="Título del álbum" className="bg-slate-950 text-white px-3 py-1.5 rounded-xl text-sm outline-none border border-slate-700 w-full sm:w-[150px] min-w-0 flex-1" />
-          <label className="cursor-pointer bg-pink-600 hover:bg-pink-500 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap">Cambiar portada <input type="file" hidden onChange={(e) => subirPortada(e.target.files?.[0])} /></label>
-          <input type="color" value={configPortada.color} onChange={(e) => setConfigPortada(prev => ({ ...prev, color: e.target.value }))} className="w-8 h-8 rounded cursor-pointer" />
-          <input type="range" min="20" max="90" value={configPortada.size} onChange={(e) => setConfigPortada(prev => ({ ...prev, size: Number(e.target.value) }))} className="w-[70px]" />
-          <select value={configPortada.font} onChange={(e) => setConfigPortada(prev => ({ ...prev, font: e.target.value }))} className="bg-slate-950 px-2 py-1.5 rounded text-xs"><option value="sans-serif">Sans</option><option value="serif">Serif</option><option value="monospace">Mono</option><option value="cursive">Cursive</option></select>
-          <select value={configPortada.vertical} onChange={(e) => setConfigPortada(prev => ({ ...prev, vertical: e.target.value }))} className="bg-slate-950 px-2 py-1.5 rounded text-xs"><option value="top">Arriba</option><option value="center">Centro</option><option value="bottom">Abajo</option></select>
-          <select value={configPortada.horizontal} onChange={(e) => setConfigPortada(prev => ({ ...prev, horizontal: e.target.value }))} className="bg-slate-950 px-2 py-1.5 rounded text-xs"><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select>
+        <div className={`absolute inset-0 bg-slate-900/95 border border-slate-700 rounded-2xl px-3 py-2 backdrop-blur-xl shadow-xl flex flex-nowrap items-center justify-start md:justify-center gap-3 w-full overflow-x-auto custom-scrollbar transition-all duration-300 ${isViewingCover ? 'opacity-100 visible translate-y-0 z-10' : 'opacity-0 invisible pointer-events-none -translate-y-4 -z-10'}`}>
+          <input type="text" value={album?.titulo || ''} onChange={(e) => actualizarTitulo(e.target.value)} placeholder="Título del álbum" className="bg-slate-950 text-white px-3 py-1.5 rounded-xl text-sm outline-none border border-slate-700 shrink-0 w-[140px] sm:w-[150px]" />
+          
+          {/* AQUÍ ESTÁ EL ACCEPT="IMAGE/*" PARA LA PORTADA */}
+          <label className="cursor-pointer bg-pink-600 hover:bg-pink-500 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0">Cambiar portada <input type="file" accept="image/*" hidden onChange={(e) => subirPortada(e.target.files?.[0])} /></label>
+          
+          <input type="color" value={configPortada.color} onChange={(e) => setConfigPortada(prev => ({ ...prev, color: e.target.value }))} className="w-8 h-8 rounded cursor-pointer shrink-0" />
+          <input type="range" min="20" max="90" value={configPortada.size} onChange={(e) => setConfigPortada(prev => ({ ...prev, size: Number(e.target.value) }))} className="w-[70px] shrink-0" />
+          <select value={configPortada.font} onChange={(e) => setConfigPortada(prev => ({ ...prev, font: e.target.value }))} className="bg-slate-950 px-2 py-1.5 rounded text-xs shrink-0"><option value="sans-serif">Sans</option><option value="serif">Serif</option><option value="monospace">Mono</option><option value="cursive">Cursive</option></select>
+          <select value={configPortada.vertical} onChange={(e) => setConfigPortada(prev => ({ ...prev, vertical: e.target.value }))} className="bg-slate-950 px-2 py-1.5 rounded text-xs shrink-0"><option value="top">Arriba</option><option value="center">Centro</option><option value="bottom">Abajo</option></select>
+          <select value={configPortada.horizontal} onChange={(e) => setConfigPortada(prev => ({ ...prev, horizontal: e.target.value }))} className="bg-slate-950 px-2 py-1.5 rounded text-xs shrink-0"><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select>
         </div>
 
         <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!isViewingCover ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible pointer-events-none -translate-y-4'}`}>
@@ -397,9 +401,9 @@ export default function App() {
         {/* EL LIBRO */}
         <div className={`w-full flex ${isMobile ? 'max-w-[420px] flex-col' : 'max-w-[1000px] flex-row'} h-[75vh] md:h-[650px] relative mx-auto rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.9)]`}>
           
-          {/* LOMO CENTRAL (Solo Desktop) */}
+          {/* LOMO CENTRAL (Solo Desktop) - AHORA CON z-[1000] PARA NO DESAPARECER */}
           {!isMobile && (
-            <div className="absolute left-1/2 top-0 bottom-0 w-24 -translate-x-1/2 bg-gradient-to-r from-transparent via-black/60 to-transparent z-40 pointer-events-none mix-blend-multiply" />
+            <div className="absolute left-1/2 top-0 bottom-0 w-24 -translate-x-1/2 bg-gradient-to-r from-transparent via-black/60 to-transparent z-[1000] pointer-events-none mix-blend-multiply" />
           )}
 
           {/* PÁGINA IZQUIERDA (O única en móvil) */}
@@ -464,7 +468,7 @@ export default function App() {
           background-size: 20px 20px;
         }
         
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.15); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,0.3); }
