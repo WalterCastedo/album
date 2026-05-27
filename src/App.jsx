@@ -164,11 +164,19 @@ export default function App() {
     return [slots];
   };
 
-  const irAtras = () => flipBookRef.current?.pageFlip().flipPrev()
-  const irAdelante = () => flipBookRef.current?.pageFlip().flipNext()
+  const irAtras = () => {
+  if (flipBookRef.current) {
+    flipBookRef.current.pageFlip().flipPrev()
+  }
+}
 
+const irAdelante = () => {
+  if (flipBookRef.current) {
+    flipBookRef.current.pageFlip().flipNext()
+  }
+}
   return (
-    <div className="h-screen bg-slate-950 text-white p-1 md:p-3 font-sans selection:bg-pink-500 overflow-hidden real-album-body flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-white p-1 md:p-3 font-sans selection:bg-pink-500 overflow-y-auto overflow-x-hidden real-album-body flex flex-col">
       
       {/* ENCABEZADO PRINCIPAL */}
       <header className="max-w-5xl mx-auto text-center mb-.5 select-none">
@@ -220,9 +228,10 @@ export default function App() {
   maxShadowOpacity={0.6}
   showCover={false}
 
-  useMouseEvents={false}
+  useMouseEvents={true}
   mobileScrollSupport={false}
   disableFlipByClick={true}
+  clickEventForward={false}
 
   mode={isMobile ? 'portrait' : 'landscape'}
   onFlip={(e) => {
@@ -445,14 +454,17 @@ export default function App() {
         .page-sheet {
           box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
         }
-        .stf__parent {
-          cursor: grab;
-        }
-        .stf__parent:active {
-          cursor: grabbing;
-        }
-        .stf__parent {
+       
+       .stf__parent {
   cursor: default !important;
+}
+
+.stf__block {
+  pointer-events: auto !important;
+}
+
+.page-sheet {
+  pointer-events: auto;
 }
       `}</style>
     </div>
