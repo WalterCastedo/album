@@ -12,6 +12,7 @@ export default function App() {
   const [menuAbiertoPagina, setMenuAbiertoPagina] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [toast, setToast] = useState("");
+  const [stickersLoading, setStickersLoading] = useState({});
   // ESTADO DE NAVEGACIÓN Y ANIMACIÓN
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState("");
@@ -19,10 +20,13 @@ export default function App() {
   const [modalCrear, setModalCrear] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevaCantidad, setNuevaCantidad] = useState(4);
+  const [insertAfter, setInsertAfter] = useState("final");
+  const [moviendoPagina, setMoviendoPagina] = useState(null);
   const SLOT_W = 115;
-  const [bloquearDrag, setBloquearDrag] = useState(false);
-  const SLOT_H = 0;
+  const lastWheelRef = useRef(0);
+  const SLOT_H = 150;
   const movedRef = useRef(false);
+
   const [configPortada, setConfigPortada] = useState({
     color: "#ffffff",
     size: 48,
@@ -40,7 +44,8 @@ export default function App() {
     ],
     [paginas],
   );
-
+  const pendingSaveRef = useRef({});
+  const saveTimeoutRef = useRef(null);
   // DETECTOR RESPONSIVO DE PANTALLA
   useEffect(() => {
     const comprobarPantalla = () => {
@@ -57,58 +62,138 @@ export default function App() {
     window.addEventListener("resize", comprobarPantalla);
     return () => window.removeEventListener("resize", comprobarPantalla);
   }, []);
+  function guardarStickerEnBD(id, cambios) {
+    const limpio = Object.fromEntries(
+      Object.entries(cambios).filter(
+        ([_, v]) => v !== undefined && !Number.isNaN(v),
+      ),
+    );
 
+    pendingSaveRef.current[id] = {
+      ...(pendingSaveRef.current[id] || {}),
+      ...limpio,
+    };
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      const updates = pendingSaveRef.current;
+      pendingSaveRef.current = {};
+
+      for (const id in updates) {
+        const { error } = await supabase
+          .from("stickers")
+          .update(updates[id])
+          .eq("id", id);
+
+        if (error) {
+          console.error("Error Supabase:", error);
+        }
+      }
+    }, 600);
+  }
   // CARGA INICIAL DE DATOS
   useEffect(() => {
-    cargarAlbum();
-    cargarPaginas();
-    cargarStickers();
-  }, []);
-  function iniciarDrag(e, sticker) {
-    e.preventDefault();
-    movedRef.current = false;
+    async function init() {
+      await cargarAlbum();
 
+      const { data } = await supabase
+        .from("paginas")
+        .select("*")
+        .order("orden", { ascending: true });
+      if (!data) return;
+
+      setPaginas(data);
+
+      // solo páginas cercanas a la actual
+      const visibles = data
+        .slice(Math.max(0, currentIndex - 2), currentIndex + 4)
+        .map((p) => p.id);
+
+      cargarStickers(visibles);
+    }
+
+    init();
+  }, []);
+  useEffect(() => {
+    if (!paginas.length) return;
+
+    const visibles = paginas
+      .slice(Math.max(0, currentIndex - 2), currentIndex + 4)
+      .map((p) => p.id);
+
+    cargarStickers(visibles);
+  }, [currentIndex, paginas]);
+  function iniciarDrag(e, sticker) {
+    // Evitar que el clic se propague a elementos padres
+    e.stopPropagation();
+
+    // Solo llamamos preventDefault si el evento es cancelable (evita errores en navegadores)
+    if (e.type !== "touchstart" && e.cancelable) {
+      e.preventDefault();
+    }
+    movedRef.current = false; // Reset de la bandera de movimiento
+
+    // Detectar si es touch o mouse
     const isTouch = e.touches?.[0];
     const clientX = isTouch ? e.touches[0].clientX : e.clientX;
     const clientY = isTouch ? e.touches[0].clientY : e.clientY;
 
+    // Guardar referencia inicial
     dragRef.current = {
       id: sticker.id,
       lastX: clientX,
       lastY: clientY,
     };
 
+    // Añadir listeners con la opción { passive: false } explícita para evitar errores
     window.addEventListener("mousemove", mover);
-    window.addEventListener("touchmove", mover);
+    window.addEventListener("touchmove", mover, { passive: false });
     window.addEventListener("mouseup", soltar);
     window.addEventListener("touchend", soltar);
   }
+
   function mover(e) {
-    if (!dragRef.current) return;
+    const drag = dragRef.current;
+
+    if (!drag) return;
+
+    if (e.cancelable) {
+      e.preventDefault();
+    }
 
     movedRef.current = true;
 
     const isTouch = e.touches?.[0];
+
     const clientX = isTouch ? e.touches[0].clientX : e.clientX;
     const clientY = isTouch ? e.touches[0].clientY : e.clientY;
 
-    const dx = clientX - dragRef.current.lastX;
-    const dy = clientY - dragRef.current.lastY;
+    const dx = clientX - drag.lastX;
+    const dy = clientY - drag.lastY;
 
-    dragRef.current.lastX = clientX;
-    dragRef.current.lastY = clientY;
+    drag.lastX = clientX;
+    drag.lastY = clientY;
 
-    const id = dragRef.current.id;
+    const id = drag.id;
 
     setStickers((prev) =>
       prev.map((s) => {
         if (s.id !== id) return s;
+
         const zoom = Math.max(getMinZoom(s), s.zoom ?? 1);
 
         const newX = (s.x ?? 0) + dx;
         const newY = (s.y ?? 0) + dy;
 
         const limitado = limitarMovimiento(newX, newY, zoom);
+
+        // protección contra null
+        if (dragRef.current) {
+          dragRef.current.x = limitado.x;
+          dragRef.current.y = limitado.y;
+          dragRef.current.zoom = zoom;
+        }
 
         return {
           ...s,
@@ -117,6 +202,37 @@ export default function App() {
         };
       }),
     );
+  }
+  async function soltar() {
+    const drag = dragRef.current;
+
+    if (!drag) return;
+
+    const id = drag.id;
+
+    window.removeEventListener("mousemove", mover);
+
+    window.removeEventListener("touchmove", mover, {
+      passive: false,
+    });
+
+    window.removeEventListener("mouseup", soltar);
+
+    window.removeEventListener("touchend", soltar);
+
+    if (movedRef.current) {
+      guardarStickerEnBD(id, {
+        x: drag.x,
+        y: drag.y,
+        zoom: drag.zoom,
+      });
+    }
+
+    dragRef.current = null;
+
+    setTimeout(() => {
+      movedRef.current = false;
+    }, 100);
   }
   function limitarMovimiento(x, y, zoom) {
     const currentW = SLOT_W * zoom;
@@ -133,34 +249,7 @@ export default function App() {
       y: Math.max(-limitY, Math.min(limitY, y)),
     };
   }
-  async function soltar() {
-    if (!dragRef.current) return;
 
-    const id = dragRef.current.id;
-    const sticker = stickers.find((s) => s.id === id);
-
-    if (sticker) {
-      await supabase
-        .from("stickers")
-        .update({
-          x: sticker.x,
-          y: sticker.y,
-          zoom: sticker.zoom,
-        })
-        .eq("id", id);
-    }
-
-    dragRef.current = null;
-
-    window.removeEventListener("mousemove", mover);
-    window.removeEventListener("touchmove", mover);
-    window.removeEventListener("mouseup", soltar);
-    window.removeEventListener("touchend", soltar);
-
-    setTimeout(() => {
-      movedRef.current = false;
-    }, 0);
-  }
   async function cargarAlbum() {
     const { data, error } = await supabase
       .from("album")
@@ -198,7 +287,7 @@ export default function App() {
     const { data } = await supabase
       .from("paginas")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("orden", { ascending: true });
     if (!data || data.length === 0) {
       const { data: nueva } = await supabase
         .from("paginas")
@@ -210,34 +299,23 @@ export default function App() {
     setPaginas(data);
   }
 
-  async function cargarStickers() {
-    const { data } = await supabase.from("stickers").select("*");
-    setStickers(data || []);
-  }
+  async function cargarStickers(paginaIds = []) {
+    let query = supabase.from("stickers").select("*");
 
-  function comprimirImagen(file, maxWidth = 900, quality = 0.7) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target.result;
-      };
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const scale = maxWidth / img.width;
-        canvas.width = maxWidth;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(
-          (blob) => {
-            resolve(new File([blob], file.name, { type: "image/jpeg" }));
-          },
-          "image/jpeg",
-          quality,
-        );
-      };
-      reader.readAsDataURL(file);
+    if (paginaIds.length > 0) {
+      query = query.in("pagina_id", paginaIds);
+    }
+
+    const { data } = await query;
+
+    if (!data) return;
+
+    setStickers((prev) => {
+      // eliminar stickers viejos de esas páginas
+      const filtrados = prev.filter((s) => !paginaIds.includes(s.pagina_id));
+
+      // agregar los nuevos
+      return [...filtrados, ...data];
     });
   }
 
@@ -269,38 +347,99 @@ export default function App() {
     setPaginas((prev) => [...prev, data]);
   }
   async function crearPaginaConfirmada() {
-    if (!nuevoNombre) return;
+    if (!nuevoNombre) {
+      alert("Escribe un nombre para la hoja");
+      return;
+    }
 
-    const { data, error } = await supabase
-      .from("paginas")
-      .insert({
-        titulo: nuevoNombre,
-        cantidad_fotos: nuevaCantidad,
-      })
-      .select()
-      .single();
+    const confirmar = confirm(
+      `¿Crear la hoja "${nuevoNombre}" con ${nuevaCantidad} imágenes?`,
+    );
 
-    if (error) return console.error(error);
+    if (!confirmar) return;
+    let orden = paginas.length + 1;
+
+    // INSERTAR AL INICIO
+    if (insertAfter === "inicio") {
+      orden = 1;
+
+      for (const p of paginas) {
+        await supabase
+          .from("paginas")
+          .update({
+            orden: p.orden + 1,
+          })
+          .eq("id", p.id);
+      }
+    }
+
+    // INSERTAR ENTRE HOJAS
+    if (insertAfter !== "final" && insertAfter !== "inicio") {
+      const paginaBase = paginas.find((p) => p.id === Number(insertAfter));
+
+      if (paginaBase) {
+        orden = paginaBase.orden + 1;
+
+        // mover páginas siguientes
+        for (const p of paginas) {
+          if (p.orden >= orden) {
+            await supabase
+              .from("paginas")
+              .update({
+                orden: p.orden + 1,
+              })
+              .eq("id", p.id);
+          }
+        }
+      }
+    }
+
+    const { error } = await supabase.from("paginas").insert({
+      titulo: nuevoNombre,
+      cantidad_fotos: nuevaCantidad,
+      orden,
+    });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    await cargarPaginas();
 
     setModalCrear(false);
+
     setNuevoNombre("");
     setNuevaCantidad(4);
+    setInsertAfter("final");
 
-    setPaginas((prev) => {
-      const nuevas = [...prev, data];
+    setToast("Página creada correctamente");
 
-      setToast("Página creada correctamente");
-      setTimeout(() => setToast(""), 2000);
-
-      return nuevas;
-    });
+    setTimeout(() => setToast(""), 2000);
   }
-
   async function eliminarPagina(id) {
     const confirmar = confirm("¿Eliminar esta página y todos sus stickers?");
-    if (!confirmar) return;
+
+    if (!confirmar) return false;
+
     await supabase.from("stickers").delete().eq("pagina_id", id);
+
     await supabase.from("paginas").delete().eq("id", id);
+
+    const { data: nuevas } = await supabase
+      .from("paginas")
+      .select("*")
+      .order("orden", { ascending: true });
+
+    for (let i = 0; i < nuevas.length; i++) {
+      await supabase
+        .from("paginas")
+        .update({
+          orden: i + 1,
+        })
+        .eq("id", nuevas[i].id);
+    }
+
     await cargarPaginas();
     await cargarStickers();
 
@@ -308,7 +447,10 @@ export default function App() {
       isMobile ? 1 : 0,
       currentIndex - (isMobile ? 1 : 2),
     );
+
     ejecutarAnimacion(prevIndex, "prev");
+
+    return true;
   }
 
   async function renombrarPagina(id) {
@@ -319,7 +461,56 @@ export default function App() {
     );
     await supabase.from("paginas").update({ titulo: nuevoNombre }).eq("id", id);
   }
+  async function moverPagina(id, nuevoOrden) {
+    const paginasOrdenadas = [...paginas].sort((a, b) => a.orden - b.orden);
 
+    const paginaActual = paginasOrdenadas.find((p) => p.id === id);
+
+    if (!paginaActual) return;
+
+    const ordenViejo = paginaActual.orden;
+
+    // misma posición
+    if (ordenViejo === nuevoOrden) return;
+
+    // mover hacia abajo
+    if (nuevoOrden > ordenViejo) {
+      for (const p of paginasOrdenadas) {
+        if (p.orden > ordenViejo && p.orden <= nuevoOrden) {
+          await supabase
+            .from("paginas")
+            .update({
+              orden: p.orden - 1,
+            })
+            .eq("id", p.id);
+        }
+      }
+    }
+
+    // mover hacia arriba
+    else {
+      for (const p of paginasOrdenadas) {
+        if (p.orden < ordenViejo && p.orden >= nuevoOrden) {
+          await supabase
+            .from("paginas")
+            .update({
+              orden: p.orden + 1,
+            })
+            .eq("id", p.id);
+        }
+      }
+    }
+
+    // actualizar actual
+    await supabase
+      .from("paginas")
+      .update({
+        orden: nuevoOrden,
+      })
+      .eq("id", id);
+
+    await cargarPaginas();
+  }
   async function subirFondo(file, paginaId) {
     if (!file) return;
     const imagen = await convertirAJPG(file, 1600, 0.7);
@@ -334,6 +525,12 @@ export default function App() {
   }
 
   async function subirStickerSlot(file, paginaId, slotId) {
+    const loadingKey = `${paginaId}-${slotId}`;
+
+    setStickersLoading((prev) => ({
+      ...prev,
+      [loadingKey]: true,
+    }));
     const imagen = await convertirAJPG(file, 1600, 0.7);
 
     const nombre = Date.now() + imagen.name;
@@ -341,7 +538,7 @@ export default function App() {
     const { data } = supabase.storage.from("stickers").getPublicUrl(nombre);
 
     // obtener dimensiones reales
-    const img = new Image();
+    const img = document.createElement("img");
     const urlTemp = URL.createObjectURL(imagen);
 
     const { naturalWidth, naturalHeight } = await new Promise((resolve) => {
@@ -356,31 +553,56 @@ export default function App() {
 
     URL.revokeObjectURL(urlTemp);
 
-    await supabase.from("stickers").insert({
+    const { error } = await supabase.from("stickers").insert({
       pagina_id: paginaId,
       slot_id: slotId,
       image: data.publicUrl,
       x: 0,
       y: 0,
       zoom: 1,
-      naturalWidth,
-      naturalHeight,
+      natural_width: naturalWidth,
+      natural_height: naturalHeight,
     });
 
-    cargarStickers();
+    if (error) {
+      setStickersLoading((prev) => ({
+        ...prev,
+        [loadingKey]: false,
+      }));
+      console.error("ERROR INSERT STICKER:", error);
+      alert(error.message);
+      return;
+    }
+
+    await cargarStickers([paginaId]);
+
+    setStickersLoading((prev) => ({
+      ...prev,
+      [loadingKey]: false,
+    }));
   }
   function getMinZoom(sticker) {
-    if (!sticker.naturalWidth || !sticker.naturalHeight) return 1;
+    if (!sticker.natural_width || !sticker.natural_height) return 1;
 
-    const scaleX = SLOT_W / sticker.naturalWidth;
-    const scaleY = SLOT_H / sticker.naturalHeight;
+    const scaleX = SLOT_W / sticker.natural_width;
+    const scaleY = SLOT_H / sticker.natural_height;
 
-    // Usamos Math.max para asegurar que cubra toda el área (cover)
     return Math.max(scaleX, scaleY);
   }
   async function eliminarSticker(id) {
+    const confirmar = confirm("¿Eliminar este cromo del álbum?");
+
+    if (!confirmar) return;
+
     await supabase.from("stickers").delete().eq("id", id);
-    cargarStickers();
+
+    setStickers((prev) => prev.filter((s) => s.id !== id));
+
+    setToast("Cromo eliminado");
+
+    setTimeout(() => {
+      setToast("");
+    }, 2000);
   }
 
   function convertirAJPG(file, maxWidth = 1200, quality = 0.8) {
@@ -388,7 +610,7 @@ export default function App() {
       const reader = new FileReader();
 
       reader.onload = (e) => {
-        const img = new Image();
+        const img = document.createElement("img");
         img.src = e.target.result;
 
         let done = false;
@@ -498,7 +720,15 @@ export default function App() {
   const paginaDerecha = isMobile ? null : bookPages[currentIndex + 1];
   const isMenuLeftOpen = menuAbiertoPagina === paginaIzquierda?.id;
   const isMenuRightOpen = !isMobile && menuAbiertoPagina === paginaDerecha?.id;
+  const stickersMap = useMemo(() => {
+    const map = {};
 
+    for (const s of stickers) {
+      map[`${s.pagina_id}-${s.slot_id}`] = s;
+    }
+
+    return map;
+  }, [stickers]);
   // ===================== RENDERIZADOR DE PÁGINAS =====================
   const renderItem = (item, isLeftPage) => {
     if (!item || item.isBlankCover) {
@@ -515,6 +745,8 @@ export default function App() {
           <div className="absolute inset-0 z-0 bg-black overflow-hidden rounded-[inherit] border-slate-700 border-r-4">
             {album?.portada ? (
               <img
+                loading="lazy"
+                decoding="async"
                 src={album.portada}
                 alt="Portada"
                 className="absolute inset-0 w-full h-full object-cover"
@@ -618,6 +850,7 @@ export default function App() {
                   >
                     ✏️ Renombrar Hoja
                   </button>
+
                   {/* AQUÍ ESTÁ EL ACCEPT="IMAGE/*" PARA EL FONDO */}
                   <label className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 cursor-pointer block">
                     🖼️ Cambiar Fondo{" "}
@@ -632,10 +865,88 @@ export default function App() {
                     />
                   </label>
                   <div className="border-t border-slate-800 my-1" />
+                  <div className="px-3 py-2 border-b border-slate-800 flex flex-col gap-2">
+                    <select
+                      value={
+                        moviendoPagina?.id === item.id
+                          ? moviendoPagina.destino
+                          : ""
+                      }
+                      onChange={(e) => {
+                        setMoviendoPagina({
+                          id: item.id,
+                          destino: e.target.value,
+                        });
+                      }}
+                      className="w-full bg-slate-800 text-white text-xs rounded px-2 py-2"
+                    >
+                      <option value="">Seleccionar destino</option>
+
+                      <option value="inicio">Al inicio</option>
+
+                      {paginas
+                        .filter((p) => p.id !== item.id)
+                        .sort((a, b) => a.orden - b.orden)
+                        .map((p) => (
+                          <option key={p.id} value={p.orden}>
+                            Después de: {p.titulo}
+                          </option>
+                        ))}
+                    </select>
+
+                    <button
+                      disabled={
+                        !moviendoPagina ||
+                        moviendoPagina.id !== item.id ||
+                        !moviendoPagina.destino
+                      }
+                      onClick={async () => {
+                        if (!moviendoPagina || moviendoPagina.id !== item.id) {
+                          return;
+                        }
+
+                        let nuevoOrden = 1;
+
+                        if (moviendoPagina.destino === "inicio") {
+                          nuevoOrden = 1;
+                        } else {
+                          nuevoOrden = Number(moviendoPagina.destino) + 1;
+                        }
+
+                        const confirmar = confirm("¿Mover esta hoja?");
+
+                        if (!confirmar) return;
+
+                        await moverPagina(item.id, nuevoOrden);
+
+                        setMoviendoPagina(null);
+
+                        setMenuAbiertoPagina(null);
+
+                        setToast("Hoja movida");
+
+                        setTimeout(() => {
+                          setToast("");
+                        }, 2000);
+                      }}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded px-2 py-2 font-bold"
+                    >
+                      Confirmar movimiento
+                    </button>
+                  </div>
                   <button
-                    onClick={() => {
-                      eliminarPagina(item.id);
+                    onClick={async () => {
+                      const eliminado = await eliminarPagina(item.id);
+
+                      if (!eliminado) return;
+
                       setMenuAbiertoPagina(null);
+
+                      setToast("Hoja eliminada");
+
+                      setTimeout(() => {
+                        setToast("");
+                      }, 2000);
                     }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-red-900/50 text-red-400 font-medium"
                   >
@@ -659,11 +970,11 @@ export default function App() {
                   className="flex flex-row justify-center items-center gap-3 w-full"
                 >
                   {fila.map((slotId) => {
-                    const sticker = stickers
-                      .filter((s) => s.pagina_id === item.id)
-                      .find((s) => s.slot_id === slotId);
+                    const sticker = stickersMap[`${item.id}-${slotId}`];
 
                     const ocupado = !!sticker;
+                    const loadingKey = `${item.id}-${slotId}`;
+                    const cargando = stickersLoading[loadingKey];
                     const esEspecial = slotId % 2 === 0;
 
                     return (
@@ -674,15 +985,20 @@ export default function App() {
                         <div className="w-full h-full relative">
                           {/* INPUT SOLO SI ESTÁ VACÍO */}
                           {!sticker && (
-                            <label>
+                            <label className="absolute inset-0 z-20 cursor-pointer">
                               <input
                                 type="file"
                                 accept="image/*"
                                 hidden
                                 onChange={async (e) => {
                                   const file = e.target.files?.[0];
+
                                   if (!file) return;
-                                  subirStickerSlot(file, item.id, slotId);
+
+                                  await subirStickerSlot(file, item.id, slotId);
+
+                                  // permite volver a subir la misma imagen
+                                  e.target.value = "";
                                 }}
                               />
                             </label>
@@ -698,8 +1014,13 @@ export default function App() {
                                   : "border-dashed border-slate-600 bg-slate-950/80"
                             }`}
                           >
-                            {/* SI HAY STICKER */}
-                            {sticker ? (
+                            {cargando ? (
+                              <div className="w-full h-full flex items-center justify-center bg-slate-900">
+                                <div className="sticker-loading-card">
+                                  <div className="shine"></div>
+                                </div>
+                              </div>
+                            ) : ocupado ? (
                               <div
                                 className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center"
                                 onMouseDown={(e) => {
@@ -707,30 +1028,51 @@ export default function App() {
                                   iniciarDrag(e, sticker);
                                 }}
                                 onTouchStart={(e) => {
-                                  e.preventDefault();
                                   iniciarDrag(e, sticker);
                                 }}
                                 onWheel={(e) => {
-                                  e.preventDefault();
+                                  if (e.cancelable) {
+                                    e.preventDefault();
+                                  }
+                                  const now = Date.now();
+                                  if (now - lastWheelRef.current < 80) return;
+                                  lastWheelRef.current = now;
+                                  const stickerData = sticker;
+                                  if (!stickerData) return;
 
-                                  const stickerData = stickers.find(
-                                    (s) => s.id === sticker.id,
-                                  );
-                                  const minZoom = getMinZoom(sticker);
+                                  const minZoom = getMinZoom(stickerData);
+
+                                  const delta = e.deltaY < 0 ? 0.1 : -0.1;
+
                                   const newZoom = Math.max(
                                     minZoom,
-                                    Math.min(3, (sticker.zoom ?? 1) + delta),
+                                    Math.min(
+                                      3,
+                                      (stickerData.zoom ?? 1) + delta,
+                                    ),
                                   );
 
-                                  // Al actualizar el zoom, recalcula también la posición x, y
-                                  // para evitar que la imagen quede "fuera" al cambiar el zoom
+                                  // re-centra al cambiar zoom
                                   const limit = limitarMovimiento(
-                                    sticker.x,
-                                    sticker.y,
+                                    stickerData.x,
+                                    stickerData.y,
                                     newZoom,
                                   );
 
-                                  actualizarSticker(sticker.id, {
+                                  setStickers((prev) =>
+                                    prev.map((s) =>
+                                      s.id === stickerData.id
+                                        ? {
+                                            ...s,
+                                            zoom: newZoom,
+                                            x: limit.x,
+                                            y: limit.y,
+                                          }
+                                        : s,
+                                    ),
+                                  );
+
+                                  guardarStickerEnBD(stickerData.id, {
                                     zoom: newZoom,
                                     x: limit.x,
                                     y: limit.y,
@@ -745,22 +1087,22 @@ export default function App() {
                                   }}
                                 >
                                   <img
+                                    loading="lazy"
+                                    decoding="async"
                                     src={sticker.image}
                                     draggable={false}
                                     onDragStart={(e) => e.preventDefault()}
                                     className="max-w-full max-h-full object-contain select-none"
                                     onClick={() => {
-                                      if (!movedRef.current) {
+                                      if (!movedRef.current)
                                         setStickerSeleccionado(sticker);
-                                        setBloquearDrag(true);
-                                      }
                                     }}
                                   />
                                 </div>
                               </div>
                             ) : (
                               /* SLOT VACÍO */
-                              <div className="flex flex-col items-center justify-center select-none text-center p-0.5 pointer-events-none opacity-80">
+                              <div className="flex flex-col items-center justify-center select-none text-center p-0.5 opacity-80">
                                 <span
                                   className={`text-[8px] md:text-[9px] font-mono tracking-tighter uppercase font-bold ${
                                     esEspecial
@@ -919,7 +1261,7 @@ export default function App() {
             onClick={() => setModalCrear(true)}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2 rounded-xl"
           >
-            ＋ Nueva Hoja
+            Nueva Hoja
           </button>
         </div>
       </div>
@@ -1025,6 +1367,8 @@ export default function App() {
           <div className="flex flex-col items-center gap-5 max-w-[320px] w-full animate-in fade-in zoom-in-75 duration-200">
             <div className="p-3 bg-white rounded-2xl shadow-2xl transform rotate-1 border-4 border-slate-100">
               <img
+                loading="lazy"
+                decoding="async"
                 src={stickerSeleccionado.image}
                 className="max-h-[60vh] object-contain rounded-xl"
                 alt="Cromo ampliado"
@@ -1035,17 +1379,13 @@ export default function App() {
                 onClick={async () => {
                   await eliminarSticker(stickerSeleccionado.id);
                   setStickerSeleccionado(null);
-                  setBloquearDrag(false);
                 }}
                 className="bg-red-600 hover:bg-red-500 active:scale-95 px-5 py-2.5 rounded-xl font-bold text-sm shadow-xl text-white"
               >
                 Despegar
               </button>
               <button
-                onClick={() => {
-                  setStickerSeleccionado(null);
-                  setBloquearDrag(false);
-                }}
+                onClick={() => setStickerSeleccionado(null)}
                 className="bg-slate-800 hover:bg-slate-700 active:scale-95 px-5 py-2.5 rounded-xl font-bold text-sm text-white shadow-xl"
               >
                 Cerrar
@@ -1118,7 +1458,19 @@ export default function App() {
               </option>
             ))}
           </select>
+          <select
+            value={insertAfter}
+            onChange={(e) => setInsertAfter(e.target.value)}
+            className="px-3 py-2 rounded bg-slate-800"
+          >
+            <option value="inicio">Al inicio</option>
 
+            {paginas.map((p) => (
+              <option key={p.id} value={p.id}>
+                Después de: {p.titulo}
+              </option>
+            ))}
+          </select>
           {/* BOTONES */}
           <div className="flex gap-2 justify-end mt-2">
             <button
@@ -1210,6 +1562,99 @@ export default function App() {
           img {
   -webkit-user-drag: none;
   user-drag: none;
+}
+  .sticker-loading-card {
+  width: 85%;
+  height: 85%;
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    #0f172a,
+    #1e293b,
+    #334155
+  );
+
+  border: 2px solid rgba(255,255,255,0.15);
+
+  position: relative;
+
+  overflow: hidden;
+
+  animation:
+    stickerEnter 0.7s cubic-bezier(.2,.8,.2,1),
+    stickerFloat 2s ease-in-out infinite;
+
+  box-shadow:
+    0 15px 30px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.sticker-loading-card .shine {
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(255,255,255,0.25),
+    transparent
+  );
+
+  animation: stickerShine 1.2s linear infinite;
+}
+
+@keyframes stickerEnter {
+  0% {
+    transform:
+      scale(0.2)
+      rotate(-25deg)
+      translateY(80px);
+
+    opacity: 0;
+
+    filter: blur(8px);
+  }
+
+  60% {
+    transform:
+      scale(1.08)
+      rotate(4deg)
+      translateY(-4px);
+
+    opacity: 1;
+
+    filter: blur(0);
+  }
+
+  100% {
+    transform:
+      scale(1)
+      rotate(0deg)
+      translateY(0);
+  }
+}
+
+@keyframes stickerFloat {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes stickerShine {
+  0% {
+    transform: translateX(-120%) rotate(20deg);
+  }
+
+  100% {
+    transform: translateX(120%) rotate(20deg);
+  }
 }
       `}</style>
     </div>
