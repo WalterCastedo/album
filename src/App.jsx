@@ -714,10 +714,10 @@ export default function App() {
     ejecutarAnimacion(newIndex, "prev");
   };
 
-  const isViewingCover = currentIndex === 1;
-
   const paginaIzquierda = bookPages[currentIndex];
   const paginaDerecha = isMobile ? null : bookPages[currentIndex + 1];
+
+  const isViewingCover = paginaIzquierda?.isPortada || paginaDerecha?.isPortada;
   const isMenuLeftOpen = menuAbiertoPagina === paginaIzquierda?.id;
   const isMenuRightOpen = !isMobile && menuAbiertoPagina === paginaDerecha?.id;
   const stickersMap = useMemo(() => {
