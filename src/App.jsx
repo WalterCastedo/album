@@ -979,7 +979,22 @@ export default function App() {
       </>
     );
   };
+  const stickersDePagina = stickerSeleccionado
+    ? stickers
+        .filter((s) => s.pagina_id === stickerSeleccionado.pagina_id)
+        .sort((a, b) => a.slot_id - b.slot_id)
+    : [];
 
+  const indexStickerActual = stickerSeleccionado
+    ? stickersDePagina.findIndex((s) => s.id === stickerSeleccionado.id)
+    : -1;
+  const paginaDelSticker = stickerSeleccionado
+    ? paginas.find((p) => p.id === stickerSeleccionado.pagina_id)
+    : null;
+
+  const numPaginaDelSticker = stickerSeleccionado
+    ? bookPages.findIndex((p) => p.id === stickerSeleccionado.pagina_id)
+    : -1;
   return (
     <div className="min-h-screen bg-slate-950 text-white p-1 md:p-3 font-sans selection:bg-pink-500 overflow-y-auto overflow-x-hidden real-album-body flex flex-col">
       {toast && (
@@ -1152,54 +1167,170 @@ export default function App() {
       <Modal
         isOpen={!!stickerSeleccionado}
         onRequestClose={() => setStickerSeleccionado(null)}
+        shouldCloseOnOverlayClick={true}
         style={{
           overlay: {
-            background: "rgba(2, 6, 23, 0.95)",
+            background: "rgba(2, 6, 23, 0.92)",
             backdropFilter: "blur(12px)",
-            zIndex: 100,
+            zIndex: 99999,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
           },
           content: {
             background: "transparent",
             border: "none",
+            inset: "auto",
+            padding: 0,
+            overflow: "visible",
+            width: "100%",
+            maxWidth: "600px",
             display: "flex",
-            justifyContent: "center",
+            flexDirection: "column",
             alignItems: "center",
-            inset: "0px",
           },
         }}
       >
         {stickerSeleccionado && (
-          <div className="flex flex-col items-center gap-5 max-w-[400px] w-full animate-in fade-in zoom-in-75 duration-200">
-            <div className="p-2 bg-white rounded-2xl shadow-2xl transform rotate-1 border-4 border-slate-100">
-              <img
-                loading="lazy"
-                decoding="async"
-                src={stickerSeleccionado.image}
-                className="max-h-[50vh] object-contain rounded-xl"
-                alt="Cromo ampliado"
-              />
+          <div className="flex flex-col items-center gap-4 w-full animate-in fade-in zoom-in-90 duration-300 px-4 sm:px-8">
+            {/* Encabezado: Título y Número de Página */}
+            <div className="text-center flex flex-col items-center mb-2 pointer-events-none">
+              <h3 className="text-white text-xl md:text-3xl font-black tracking-tight drop-shadow-lg">
+                {paginaDelSticker?.titulo}
+              </h3>
+              <span className="text-white/60 text-[10px] md:text-xs font-mono font-bold tracking-widest uppercase mt-1 bg-white/10 px-3 py-1 rounded-full border border-white/10 shadow-sm">
+                PÁGINA {numPaginaDelSticker}
+              </span>
             </div>
 
-            <div className="flex flex-wrap gap-3 w-full justify-center">
-              {/* BOTÓN RENOMBRADO A "Miniatura" */}
+            {/* Contenedor Principal de Navegación e Imagen */}
+            <div className="relative flex items-center justify-center w-full group">
+              {/* Botón Anterior */}
+              {indexStickerActual > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStickerSeleccionado(
+                      stickersDePagina[indexStickerActual - 1],
+                    );
+                  }}
+                  className="absolute left-0 sm:-left-4 z-50 bg-slate-900/80 hover:bg-slate-800 backdrop-blur-md active:scale-90 text-white w-12 h-12 flex items-center justify-center rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/20 transition-all focus:outline-none"
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Tarjeta del Cromo */}
+              <div
+                className="relative p-2 sm:p-3 bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 transition-transform duration-300 hover:scale-[1.02]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-2 bg-white rounded-2xl shadow-inner relative overflow-hidden">
+                  <img
+                    loading="lazy"
+                    decoding="async"
+                    src={stickerSeleccionado.image}
+                    className="max-h-[45vh] md:max-h-[55vh] object-contain rounded-xl pointer-events-none select-none"
+                    alt="Cromo ampliado"
+                  />
+                </div>
+
+                {/* Etiqueta de posición */}
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] sm:text-xs font-bold px-4 py-1.5 rounded-full border border-slate-700 shadow-xl font-mono tracking-widest whitespace-nowrap z-10">
+                  {indexStickerActual + 1} / {stickersDePagina.length}
+                </div>
+              </div>
+
+              {/* Botón Siguiente */}
+              {indexStickerActual < stickersDePagina.length - 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStickerSeleccionado(
+                      stickersDePagina[indexStickerActual + 1],
+                    );
+                  }}
+                  className="absolute right-0 sm:-right-4 z-50 bg-slate-900/80 hover:bg-slate-800 backdrop-blur-md active:scale-90 text-white w-12 h-12 flex items-center justify-center rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/20 transition-all focus:outline-none"
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Controles de Acción */}
+            <div
+              className="grid grid-cols-2 sm:flex sm:flex-row gap-3 w-full justify-center mt-6"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 onClick={() => {
                   setEditorSticker(stickerSeleccionado);
                   setStickerSeleccionado(null);
                 }}
-                className="bg-blue-600 hover:bg-blue-500 active:scale-95 px-2 py-2.5 rounded-xl font-bold text-sm shadow-xl text-white"
+                className="flex items-center justify-center gap-2 bg-blue-600/90 hover:bg-blue-500 backdrop-blur-sm active:scale-95 px-4 py-3 rounded-2xl font-bold text-sm shadow-xl border border-blue-400/30 text-white transition-all"
               >
-                Miniatura
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+                <span>Ajustar</span>
               </button>
+
               <button
                 onClick={async () => {
                   await eliminarSticker(stickerSeleccionado.id);
                   setStickerSeleccionado(null);
                 }}
-                className="bg-red-600 hover:bg-red-500 active:scale-95 px-2 py-2.5 rounded-xl font-bold text-sm shadow-xl text-white"
+                className="flex items-center justify-center gap-2 bg-rose-600/90 hover:bg-rose-500 backdrop-blur-sm active:scale-95 px-4 py-3 rounded-2xl font-bold text-sm shadow-xl border border-rose-400/30 text-white transition-all"
               >
-                Despegar
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                </svg>
+                <span>Despegar</span>
               </button>
+
               <button
                 onClick={async () => {
                   try {
@@ -1217,17 +1348,46 @@ export default function App() {
                     console.error("Error al descargar:", error);
                   }
                 }}
-                className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 px-5 py-2.5 rounded-xl font-bold text-sm shadow-xl text-white"
+                className="flex items-center justify-center gap-2 bg-emerald-600/90 hover:bg-emerald-500 backdrop-blur-sm active:scale-95 px-4 py-3 rounded-2xl font-bold text-sm shadow-xl border border-emerald-400/30 text-white transition-all col-span-2 sm:col-span-1"
               >
-                Descargar
-              </button>
-              <button
-                onClick={() => setStickerSeleccionado(null)}
-                className="bg-slate-800 hover:bg-slate-700 active:scale-95 px-2 py-2.5 rounded-xl font-bold text-sm text-white shadow-xl w-full"
-              >
-                Cerrar
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" x2="12" y1="15" y2="3" />
+                </svg>
+                <span>Descargar</span>
               </button>
             </div>
+
+            {/* BOTÓN DE CERRAR EXPLÍCITO */}
+            <button
+              onClick={() => setStickerSeleccionado(null)}
+              className="mt-2 mb-4 flex items-center justify-center gap-2 bg-slate-800/80 hover:bg-slate-700 active:scale-95 px-5 py-2.5 rounded-xl font-medium text-sm shadow-lg border border-slate-600 text-slate-200 transition-all"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              <span>Cerrar</span>
+            </button>
           </div>
         )}
       </Modal>
