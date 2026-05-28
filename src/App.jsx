@@ -1340,7 +1340,7 @@ export default function App() {
       </div>
 
       <footer className="text-center py-4 text-[11px] text-slate-500 font-medium tracking-wide z-50">
-        Álbum Virtual • Diseñado con Amor
+        Álbum Virtual • Diseñado por wjcs
       </footer>
 
       {/* MODAL CROMO AMPLIADO */}
