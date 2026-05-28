@@ -316,19 +316,17 @@ export default function App() {
     cargarStickers(visibles);
   }, [currentIndex, paginas]);
   // --- SUSCRIPCIÓN A WEBSOCKETS (SUPABASE REALTIME) ---
+  // --- SUSCRIPCIÓN A WEBSOCKETS (SUPABASE REALTIME) ---
   useEffect(() => {
-    // Suscribirse a los cambios de la tabla 'stickers'
+    // 1. Suscribirse a los cambios de la tabla 'stickers'
     const channelStickers = supabase
       .channel("cambios-stickers")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "stickers" },
         (payload) => {
-          console.log("Cambio en stickers detectado:", payload);
-
           if (payload.eventType === "INSERT") {
             setStickers((prev) => {
-              // Evitar duplicados si el usuario actual fue quien lo insertó
               if (prev.find((s) => s.id === payload.new.id)) return prev;
               return [...prev, payload.new];
             });
@@ -343,7 +341,7 @@ export default function App() {
       )
       .subscribe();
 
-    // (Opcional) Suscribirse a los cambios de la tabla 'paginas'
+    // 2. Suscribirse a los cambios de la tabla 'paginas'
     const channelPaginas = supabase
       .channel("cambios-paginas")
       .on(
@@ -367,12 +365,27 @@ export default function App() {
       )
       .subscribe();
 
+    // 3. Suscribirse a los cambios de la tabla 'album' (TÍTULO Y PORTADA)
+    const channelAlbum = supabase
+      .channel("cambios-album")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "album" },
+        (payload) => {
+          // Actualizamos el estado del álbum con el nuevo título o portada
+          setAlbum(payload.new);
+        },
+      )
+      .subscribe();
+
     // Limpiar los WebSockets cuando el componente se desmonte
     return () => {
       supabase.removeChannel(channelStickers);
       supabase.removeChannel(channelPaginas);
+      supabase.removeChannel(channelAlbum); // <-- Añadido aquí también
     };
   }, []);
+  // ----------------------------------------------------
   // ----------------------------------------------------
   function guardarCambiosConfirmados(id, nuevosDatos) {
     setStickers((prev) =>
