@@ -163,7 +163,7 @@ export default function App() {
   const [nuevaCantidad, setNuevaCantidad] = useState(4);
   const [insertAfter, setInsertAfter] = useState("final");
   const [moviendoPagina, setMoviendoPagina] = useState(null);
-
+  const [stickerParaIntercambiar, setStickerParaIntercambiar] = useState(null);
   const SLOT_W = 115;
   const SLOT_H = 150;
 
@@ -202,7 +202,63 @@ export default function App() {
     window.addEventListener("resize", comprobarPantalla);
     return () => window.removeEventListener("resize", comprobarPantalla);
   }, []);
+  async function intercambiarStickers(paginaIdDestino, slotIdDestino) {
+    if (!stickerParaIntercambiar) return;
 
+    const cromoOrigen = stickerParaIntercambiar;
+    const cromoDestino = stickers.find(
+      (s) => s.pagina_id === paginaIdDestino && s.slot_id === slotIdDestino,
+    );
+
+    // 1. Actualización optimista en la UI (¡Añadimos pagina_id!)
+    setStickers((prev) =>
+      prev.map((s) => {
+        if (s.id === cromoOrigen.id) {
+          return { ...s, slot_id: slotIdDestino, pagina_id: paginaIdDestino };
+        }
+        if (cromoDestino && s.id === cromoDestino.id) {
+          return {
+            ...s,
+            slot_id: cromoOrigen.slot_id,
+            pagina_id: cromoOrigen.pagina_id,
+          };
+        }
+        return s;
+      }),
+    );
+
+    setStickerParaIntercambiar(null);
+
+    // 2. Guardar en Supabase (¡Añadimos pagina_id!)
+    try {
+      // Movemos el origen al destino
+      await supabase
+        .from("stickers")
+        .update({
+          slot_id: slotIdDestino,
+          pagina_id: paginaIdDestino, // Soluciona el bug principal
+        })
+        .eq("id", cromoOrigen.id);
+
+      // Si había un cromo en el destino, lo movemos al origen
+      if (cromoDestino) {
+        await supabase
+          .from("stickers")
+          .update({
+            slot_id: cromoOrigen.slot_id,
+            pagina_id: cromoOrigen.pagina_id, // Soluciona el bug principal
+          })
+          .eq("id", cromoDestino.id);
+      }
+
+      setToast("Cromos intercambiados");
+      setTimeout(() => setToast(""), 2000);
+    } catch (error) {
+      console.error("Error al intercambiar:", error);
+      // Recargar ambas páginas involucradas si falla
+      await cargarStickers([paginaIdDestino, cromoOrigen.pagina_id]);
+    }
+  }
   function guardarStickerEnBD(id, cambios) {
     const limpio = Object.fromEntries(
       Object.entries(cambios).filter(
@@ -544,7 +600,63 @@ export default function App() {
       setToast("");
     }, 2000);
   }
+  async function intercambiarStickers(paginaIdDestino, slotIdDestino) {
+    if (!stickerParaIntercambiar) return;
 
+    const cromoOrigen = stickerParaIntercambiar;
+    const cromoDestino = stickers.find(
+      (s) => s.pagina_id === paginaIdDestino && s.slot_id === slotIdDestino,
+    );
+
+    // 1. Actualización optimista en la UI (¡Añadimos pagina_id!)
+    setStickers((prev) =>
+      prev.map((s) => {
+        if (s.id === cromoOrigen.id) {
+          return { ...s, slot_id: slotIdDestino, pagina_id: paginaIdDestino };
+        }
+        if (cromoDestino && s.id === cromoDestino.id) {
+          return {
+            ...s,
+            slot_id: cromoOrigen.slot_id,
+            pagina_id: cromoOrigen.pagina_id,
+          };
+        }
+        return s;
+      }),
+    );
+
+    setStickerParaIntercambiar(null);
+
+    // 2. Guardar en Supabase (¡Añadimos pagina_id!)
+    try {
+      // Movemos el origen al destino
+      await supabase
+        .from("stickers")
+        .update({
+          slot_id: slotIdDestino,
+          pagina_id: paginaIdDestino,
+        })
+        .eq("id", cromoOrigen.id);
+
+      // Si había un cromo en el destino, lo movemos al origen
+      if (cromoDestino) {
+        await supabase
+          .from("stickers")
+          .update({
+            slot_id: cromoOrigen.slot_id,
+            pagina_id: cromoOrigen.pagina_id,
+          })
+          .eq("id", cromoDestino.id);
+      }
+
+      setToast("Cromos intercambiados");
+      setTimeout(() => setToast(""), 2000);
+    } catch (error) {
+      console.error("Error al intercambiar:", error);
+      // Recargar ambas páginas involucradas si falla
+      await cargarStickers([paginaIdDestino, cromoOrigen.pagina_id]);
+    }
+  }
   function convertirAJPG(file, maxWidth = 1200, quality = 0.8) {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -867,10 +979,36 @@ export default function App() {
                     return (
                       <div
                         key={slotId}
-                        className="slot-physical pointer-events-auto shadow-md rounded-xl transition-all duration-300 relative flex items-center justify-center overflow-hidden"
+                        className={`slot-physical relative ${
+                          stickerParaIntercambiar &&
+                          stickerParaIntercambiar.id === sticker?.id
+                            ? "ring-4 ring-pink-500 animate-pulse scale-105 z-50"
+                            : stickerParaIntercambiar
+                              ? "cursor-pointer hover:ring-4 ring-blue-400 ring-2 ring-blue-400/30" // Le añadí un ring suave permanente para que se note dónde puedes soltar
+                              : ""
+                        }`}
+                        onClick={(e) => {
+                          // LÓGICA DE INTERCAMBIO vs VISUALIZACIÓN
+                          if (stickerParaIntercambiar) {
+                            e.stopPropagation();
+
+                            // Si toca el MISMO cromo, cancelamos el intercambio
+                            if (stickerParaIntercambiar.id === sticker?.id) {
+                              setStickerParaIntercambiar(null);
+                              setToast(""); // <--- ¡AQUÍ ESTÁ LA MAGIA! Borramos el cartel
+                            } else {
+                              // Si toca un espacio diferente, hacemos el intercambio
+                              intercambiarStickers(item.id, slotId);
+                            }
+                          } else if (!isLongPressRef.current && ocupado) {
+                            // Comportamiento normal (abrir visualizador)
+                            setStickerSeleccionado(sticker);
+                          }
+                        }}
                       >
                         <div className="w-full h-full relative">
-                          {!sticker && (
+                          {/* Input de archivo SOLO si no estamos intercambiando y está vacío */}
+                          {!sticker && !stickerParaIntercambiar && (
                             <label className="absolute inset-0 z-20 cursor-pointer">
                               <input
                                 type="file"
@@ -887,7 +1025,13 @@ export default function App() {
                           )}
 
                           <div
-                            className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${ocupado ? "border-white bg-white shadow-lg shadow-black/80" : esEspecial ? "border-dashed border-amber-400/50 bg-amber-500/10" : "border-dashed border-slate-600 bg-slate-950/80"}`}
+                            className={`w-full h-full transition-all duration-300 relative rounded-xl overflow-hidden flex items-center justify-center border-2 ${
+                              ocupado
+                                ? "border-white bg-white shadow-lg shadow-black/80"
+                                : esEspecial
+                                  ? "border-dashed border-amber-400/50 bg-amber-500/10"
+                                  : "border-dashed border-slate-600 bg-slate-950/80"
+                            }`}
                           >
                             {cargando ? (
                               <div className="w-full h-full flex items-center justify-center bg-slate-900">
@@ -899,6 +1043,7 @@ export default function App() {
                               <div
                                 className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center cursor-pointer"
                                 onMouseDown={() => {
+                                  if (stickerParaIntercambiar) return;
                                   isLongPressRef.current = false;
                                   longPressRef.current = setTimeout(() => {
                                     isLongPressRef.current = true;
@@ -912,6 +1057,7 @@ export default function App() {
                                   clearTimeout(longPressRef.current)
                                 }
                                 onTouchStart={() => {
+                                  if (stickerParaIntercambiar) return;
                                   isLongPressRef.current = false;
                                   longPressRef.current = setTimeout(() => {
                                     isLongPressRef.current = true;
@@ -921,13 +1067,10 @@ export default function App() {
                                 onTouchEnd={() =>
                                   clearTimeout(longPressRef.current)
                                 }
-                                onClick={() => {
-                                  if (!isLongPressRef.current) {
-                                    setStickerSeleccionado(sticker);
-                                  }
-                                }}
+                                // ¡AQUÍ BORRAMOS EL ONCLICK VIEJO QUE CAUSABA EL CONFLICTO!
                               >
-                                {/* CONTENEDOR LÓGICO: IGUAL AL DEL MODAL */}
+                                {/* CONTENEDOR LÓGICO */}
+                                {/* CONTENEDOR LÓGICO */}{" "}
                                 <div className="slot-logical absolute flex items-center justify-center">
                                   <div
                                     className="absolute inset-0 flex items-center justify-center"
@@ -1286,6 +1429,31 @@ export default function App() {
             >
               <button
                 onClick={() => {
+                  setStickerParaIntercambiar(stickerSeleccionado);
+                  setStickerSeleccionado(null);
+                  setToast("Selecciona el espacio de destino");
+                }}
+                className="flex items-center justify-center gap-2 bg-purple-600/90 hover:bg-purple-500 backdrop-blur-sm active:scale-95 px-4 py-3 rounded-2xl font-bold text-sm shadow-xl border border-purple-400/30 text-white transition-all"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m16 3 4 4-4 4" />
+                  <path d="M20 7H4" />
+                  <path d="m8 21-4-4 4-4" />
+                  <path d="M4 17h16" />
+                </svg>
+                <span>Mover</span>
+              </button>
+              <button
+                onClick={() => {
                   setEditorSticker(stickerSeleccionado);
                   setStickerSeleccionado(null);
                 }}
@@ -1348,7 +1516,7 @@ export default function App() {
                     console.error("Error al descargar:", error);
                   }
                 }}
-                className="flex items-center justify-center gap-2 bg-emerald-600/90 hover:bg-emerald-500 backdrop-blur-sm active:scale-95 px-4 py-3 rounded-2xl font-bold text-sm shadow-xl border border-emerald-400/30 text-white transition-all col-span-2 sm:col-span-1"
+                className="flex items-center justify-center gap-2 bg-emerald-600/90 hover:bg-emerald-500 backdrop-blur-sm active:scale-95 px-4 py-3 rounded-2xl font-bold text-sm shadow-xl border border-emerald-400/30 text-white transition-all col-span-1 sm:col-span-1"
               >
                 <svg
                   width="18"
